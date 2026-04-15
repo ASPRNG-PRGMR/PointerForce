@@ -1,0 +1,17 @@
+[Unit]
+Description=PointerForce – input event mapper daemon
+After=local-fs.target
+
+[Service]
+Type=forking
+PIDFile=/tmp/pointerforce.pid
+ExecStart=/usr/local/bin/pointerforce -d -c /etc/pointerforce.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3
+User=root
+StandardOutput=append:/var/log/pointerforce.log
+StandardError=append:/var/log/pointerforce.log
+
+[Install]
+WantedBy=multi-user.target

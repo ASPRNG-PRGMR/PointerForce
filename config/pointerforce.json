@@ -1,0 +1,14 @@
+{
+  "device": "/dev/input/event6",
+  "grab": false,
+  "daemon": false,
+  "debug": true,
+  "bindings": {
+    "BTN_SIDE":    "notify-send 'PointerForce' 'Side button pressed'",
+    "BTN_EXTRA":   "xdg-open https://example.com",
+    "BTN_FORWARD": "playerctl next",
+    "BTN_BACK":    "playerctl previous",
+    "KEY_F13":     "scrot ~/screenshots/$(date +%s).png",
+    "KEY_F14":     "systemctl suspend"
+  }
+}
