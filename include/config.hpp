@@ -12,13 +12,14 @@ namespace pf {
 class ConfigLoader {
 public:
     // Load JSON from path into g_config.
-    // Returns true on success, false on any parse error.
+    // Clears and replaces all existing config (safe to call for hot-reload).
+    // Returns true on success.
     static bool load(const std::string& path);
 
-    // Validate the already-loaded g_config (device path exists, etc.)
+    // Validate the already-loaded g_config (at least one device, etc.)
     static bool validate();
 
-    // Dump current config to stdout (debug helper)
+    // Dump current config to stdout.
     static void dump();
 };
 

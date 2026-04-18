@@ -1,5 +1,5 @@
 [Unit]
-Description=PointerForce – input event mapper daemon
+Description=PointerForce – multi-device input event mapper
 After=local-fs.target
 
 [Service]

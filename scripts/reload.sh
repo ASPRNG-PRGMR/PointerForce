@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# reload.sh – send SIGHUP to the running PointerForce daemon
-# This will cause the daemon to re-read its config on the next loop iteration.
-# (Phase 1: triggers clean restart via signal; full hot-reload in Phase 2)
+# reload.sh – send SIGHUP to the running PointerForce daemon.
+# Phase 2: SIGHUP triggers a full in-process config reload and mapper reinit
+# without stopping the event loop or dropping any device connections.
 
 PID_FILE="/tmp/pointerforce.pid"
 
@@ -17,4 +17,4 @@ if ! kill -0 "$PID" 2>/dev/null; then
     exit 1
 fi
 
-kill -HUP "$PID" && echo "Sent SIGHUP to pointerforce (PID $PID)."
+kill -HUP "$PID" && echo "Sent SIGHUP to pointerforce (PID $PID). Config reloading in-process."

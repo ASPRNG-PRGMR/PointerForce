@@ -4,7 +4,6 @@
 #include <json/json.h>
 #include <fstream>
 #include <iostream>
-#include <filesystem>
 
 // ─────────────────────────────────────────────
 //  config.cpp
@@ -28,40 +27,76 @@ bool ConfigLoader::load(const std::string& path)
         return false;
     }
 
-    // ── device ──────────────────────────────
-    if (!root.isMember("device") || !root["device"].isString()) {
-        std::cerr << "[config] Missing or invalid 'device' field.\n";
-        return false;
-    }
-    g_config.device_path = root["device"].asString();
+    // Clear existing state so this function is safe to call as a reload.
+    g_config.devices.clear();
+    g_config.config_path = path;
 
-    // ── grab (optional, default false) ──────
-    if (root.isMember("grab") && root["grab"].isBool())
-        g_config.grab = root["grab"].asBool();
-
-    // ── daemon (optional, default false) ────
+    // ── Global options ───────────────────────
     if (root.isMember("daemon") && root["daemon"].isBool())
         g_config.daemon_mode = root["daemon"].asBool();
 
-    // ── debug (optional, default false) ─────
     if (root.isMember("debug") && root["debug"].isBool())
         g_config.debug = root["debug"].asBool();
 
-    // ── bindings ────────────────────────────
-    if (!root.isMember("bindings") || !root["bindings"].isObject()) {
-        std::cerr << "[config] No 'bindings' object found.\n";
+    if (root.isMember("control_socket") && root["control_socket"].isString())
+        g_config.control_socket = root["control_socket"].asString();
+
+    // ── Devices array ────────────────────────
+    if (!root.isMember("devices") || !root["devices"].isArray()) {
+        std::cerr << "[config] Missing or invalid 'devices' array.\n";
         return false;
     }
 
-    const Json::Value& bindings = root["bindings"];
-    for (const auto& key_name : bindings.getMemberNames()) {
-        int code = Mapper::name_to_code(key_name);
-        if (code < 0) {
-            std::cerr << "[config] Unknown key name: " << key_name
-                      << " – skipping.\n";
+    for (const auto& dev : root["devices"]) {
+        DeviceConfig dc;
+
+        if (!dev.isMember("id") || !dev["id"].isString()) {
+            std::cerr << "[config] Device entry missing 'id' field – skipping.\n";
             continue;
         }
-        g_config.bindings[code] = bindings[key_name].asString();
+        dc.id = dev["id"].asString();
+
+        // ── Match criteria ───────────────────
+        if (dev.isMember("match") && dev["match"].isObject()) {
+            const auto& m = dev["match"];
+            if (m.isMember("name")           && m["name"].isString())
+                dc.match.name_contains  = m["name"].asString();
+            if (m.isMember("vendor_product") && m["vendor_product"].isString())
+                dc.match.vendor_product = m["vendor_product"].asString();
+            if (m.isMember("path")           && m["path"].isString())
+                dc.match.path           = m["path"].asString();
+        } else if (dev.isMember("path") && dev["path"].isString()) {
+            // Shorthand: bare "path" key on the device object.
+            dc.match.path = dev["path"].asString();
+        }
+
+        if (dc.match.name_contains.empty()   &&
+            dc.match.vendor_product.empty()  &&
+            dc.match.path.empty()            &&
+            dc.id != "*")
+        {
+            std::cerr << "[config] Device '" << dc.id
+                      << "' has no match criteria – skipping.\n";
+            continue;
+        }
+
+        if (dev.isMember("grab") && dev["grab"].isBool())
+            dc.grab = dev["grab"].asBool();
+
+        // ── Bindings ─────────────────────────
+        if (dev.isMember("bindings") && dev["bindings"].isObject()) {
+            for (const auto& key_name : dev["bindings"].getMemberNames()) {
+                int code = Mapper::name_to_code(key_name);
+                if (code < 0) {
+                    std::cerr << "[config] Unknown key '" << key_name
+                              << "' in device '" << dc.id << "' – skipping.\n";
+                    continue;
+                }
+                dc.bindings[code] = dev["bindings"][key_name].asString();
+            }
+        }
+
+        g_config.devices.push_back(std::move(dc));
     }
 
     return true;
@@ -69,33 +104,38 @@ bool ConfigLoader::load(const std::string& path)
 
 bool ConfigLoader::validate()
 {
-    if (g_config.device_path.empty()) {
-        std::cerr << "[config] device_path is empty.\n";
+    if (g_config.devices.empty()) {
+        std::cerr << "[config] No devices configured.\n";
         return false;
     }
-    if (!std::filesystem::exists(g_config.device_path)) {
-        std::cerr << "[config] Device not found: "
-                  << g_config.device_path << "\n";
-        return false;
-    }
-    if (g_config.bindings.empty()) {
-        std::cerr << "[config] Warning: no bindings configured.\n";
-        // Not fatal – user might just want to test device detection.
+    for (const auto& dc : g_config.devices) {
+        if (dc.bindings.empty())
+            std::cerr << "[config] Warning: device '" << dc.id
+                      << "' has no bindings.\n";
     }
     return true;
 }
 
 void ConfigLoader::dump()
 {
-    std::cout << "[config] device     : " << g_config.device_path << "\n"
-              << "[config] grab       : " << (g_config.grab        ? "true" : "false") << "\n"
-              << "[config] daemon     : " << (g_config.daemon_mode ? "true" : "false") << "\n"
-              << "[config] debug      : " << (g_config.debug       ? "true" : "false") << "\n"
-              << "[config] bindings   : " << g_config.bindings.size() << " entries\n";
-    for (const auto& [code, cmd] : g_config.bindings) {
-        std::cout << "           "
-                  << Mapper::code_to_name(code)
-                  << " (" << code << ") → " << cmd << "\n";
+    std::cout
+        << "[config] version       : " << VERSION << "\n"
+        << "[config] daemon        : " << (g_config.daemon_mode ? "true" : "false") << "\n"
+        << "[config] debug         : " << (g_config.debug       ? "true" : "false") << "\n"
+        << "[config] control_socket: " << g_config.control_socket << "\n"
+        << "[config] devices       : " << g_config.devices.size() << "\n";
+
+    for (const auto& dc : g_config.devices) {
+        std::cout
+            << "  [" << dc.id << "]\n"
+            << "    match.name    : " << dc.match.name_contains  << "\n"
+            << "    match.vp      : " << dc.match.vendor_product  << "\n"
+            << "    match.path    : " << dc.match.path            << "\n"
+            << "    grab          : " << (dc.grab ? "true" : "false") << "\n"
+            << "    bindings      : " << dc.bindings.size()       << "\n";
+        for (const auto& [code, cmd] : dc.bindings)
+            std::cout << "      " << Mapper::code_to_name(code)
+                      << " (" << code << ") → " << cmd << "\n";
     }
 }
 

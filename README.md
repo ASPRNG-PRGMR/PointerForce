@@ -1,8 +1,8 @@
 # PointerForce
 
-> A lightweight Linux input event mapper — bind any key or button to any shell command.
+> A lightweight Linux input event mapper — bind any key or button on any number of devices to any shell command.
 
-PointerForce listens to a raw input device via `libevdev`, maps key/button presses to shell commands, and executes them asynchronously. It runs quietly in the background as a daemon, or interactively in foreground debug mode.
+PointerForce listens to raw input devices via `libevdev`, maps key/button presses to shell commands per device, and executes them asynchronously. Phase 2 adds a multi-device pipeline with an event multiplexer. Phase 2.5 adds a live control plane — inspect and modify bindings at runtime with no restart.
 
 ---
 
@@ -14,6 +14,7 @@ PointerForce listens to a raw input device via `libevdev`, maps key/button press
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [pfctl – Control Client](#pfctl--control-client)
 - [Finding Your Device](#finding-your-device)
 - [Permissions](#permissions)
 - [Systemd Service](#systemd-service)
@@ -21,30 +22,34 @@ PointerForce listens to a raw input device via `libevdev`, maps key/button press
 - [Logging & Debugging](#logging--debugging)
 - [Edge Cases & Error Handling](#edge-cases--error-handling)
 - [Project Structure](#project-structure)
-- [Phase 2 Roadmap](#phase-2-roadmap)
+- [Phase 3 Roadmap](#phase-3-roadmap)
 
 ---
 
 ## Features
 
-- **Zero overhead** event loop via `libevdev` — reads directly from `/dev/input/*`
-- **Any device** — mice, keyboards, gamepads, macro pads, foot pedals, custom HID
-- **Simple JSON config** — human-readable key names (`BTN_SIDE`, `KEY_F13`, etc.)
-- **Non-blocking execution** — commands run in detached child processes; the loop never stalls
-- **Optional exclusive grab** — prevent other applications from seeing the same events
+- **Multi-device** — any number of mice, keyboards, gamepads, macro pads, foot pedals running simultaneously
+- **Device-aware bindings** — the same button on two different devices can trigger different commands
+- **Flexible device matching** — match by name substring, USB vendor:product ID, or exact `/dev/input/eventN` path
+- **Wildcard device** — a `"*"` device id matches any device for global bindings
+- **Zero overhead event loop** — `libevdev` reads directly from `/dev/input/*`; each device runs in its own thread
+- **Non-blocking execution** — commands run in detached child processes; threads never stall
+- **Optional exclusive grab** — per-device; prevents other applications from seeing events
 - **Daemon mode** — double-fork, PID file, systemd-compatible
-- **Graceful shutdown** — SIGTERM / SIGINT / SIGHUP all handled cleanly
+- **Full in-process hot-reload** — SIGHUP or `pfctl reload` reloads config without restarting or dropping devices
+- **Control plane** — Unix socket server; `pfctl` client for runtime status, inspection, and binding modification
+- **Live event stream** — `pfctl events` shows every key press in real time
 
 ---
 
 ## Requirements
 
-| Dependency | Package (Debian/Ubuntu)       |
-|------------|-------------------------------|
-| libevdev   | `libevdev-dev`                |
-| jsoncpp    | `libjsoncpp-dev`              |
-| g++ >= 9   | `build-essential`             |
-| Linux kernel >= 2.6.36 | (evdev input subsystem) |
+| Dependency             | Package (Debian/Ubuntu)  |
+|------------------------|--------------------------|
+| libevdev               | `libevdev-dev`           |
+| jsoncpp                | `libjsoncpp-dev`         |
+| g++ >= 9 (C++17)       | `build-essential`        |
+| Linux kernel >= 2.6.36 | (evdev input subsystem)  |
 
 ```bash
 sudo apt install build-essential libevdev-dev libjsoncpp-dev
@@ -55,18 +60,25 @@ sudo apt install build-essential libevdev-dev libjsoncpp-dev
 ## Building
 
 ```bash
-git clone https://github.com/yourname/PointerForce
-cd PointerForce
+git clone https://github.com/yourname/pointerforce
+cd pointerforce
 make
 ```
 
-For a debug build with symbols and verbose output:
+This produces two binaries:
+
+| Binary        | Purpose                              |
+|---------------|--------------------------------------|
+| `pointerforce` | Background daemon / foreground mode |
+| `pfctl`        | Control client                      |
+
+Debug build (symbols, verbose output, no optimisation):
 
 ```bash
 make debug
 ```
 
-Clean build artefacts:
+Clean:
 
 ```bash
 make clean
@@ -80,9 +92,7 @@ make clean
 sudo make install
 ```
 
-This copies the binary to `/usr/local/bin/PointerForce`, the default config to `/etc/PointerForce.json`, and registers the systemd unit.
-
-To uninstall completely:
+Copies both binaries to `/usr/local/bin`, the default config to `/etc/pointerforce.json`, and registers the systemd unit.
 
 ```bash
 sudo make uninstall
@@ -92,52 +102,108 @@ sudo make uninstall
 
 ## Configuration
 
-Edit `config/PointerForce.json` (or `/etc/PointerForce.json` after install):
+Edit `config/pointerforce.json` (or `/etc/pointerforce.json` after install).
 
 ```json
 {
-  "device": "/dev/input/event5",
-  "grab": false,
   "daemon": false,
   "debug": true,
+  "control_socket": "/tmp/pointerforce.sock",
+
+  "devices": [
+    {
+      "id": "gaming_mouse",
+      "match": { "name": "Logitech G502" },
+      "grab": false,
+      "bindings": {
+        "BTN_SIDE":    "notify-send 'Mouse' 'Side button'",
+        "BTN_FORWARD": "playerctl next",
+        "BTN_BACK":    "playerctl previous"
+      }
+    },
+    {
+      "id": "macro_pad",
+      "match": { "vendor_product": "04d9:0348" },
+      "grab": true,
+      "bindings": {
+        "KEY_F13": "scrot ~/screenshots/$(date +%s).png",
+        "KEY_F14": "systemctl suspend"
+      }
+    },
+    {
+      "id": "foot_pedal",
+      "match": { "path": "/dev/input/event7" },
+      "grab": false,
+      "bindings": {
+        "BTN_LEFT":  "xdotool key ctrl+z",
+        "BTN_RIGHT": "xdotool key ctrl+s"
+      }
+    }
+  ]
+}
+```
+
+### Top-level fields
+
+| Field            | Type   | Default                        | Description                        |
+|------------------|--------|--------------------------------|------------------------------------|
+| `daemon`         | bool   | `false`                        | Run as background daemon           |
+| `debug`          | bool   | `false`                        | Verbose logging                    |
+| `control_socket` | string | `"/tmp/pointerforce.sock"`     | Path for the control Unix socket   |
+| `devices`        | array  | required                       | List of device config blocks       |
+
+### Device block fields
+
+| Field      | Type   | Required | Description                                           |
+|------------|--------|----------|-------------------------------------------------------|
+| `id`       | string | yes      | Logical label — used in logs, bindings, and `pfctl`   |
+| `match`    | object | yes*     | Criteria to identify the physical device (see below)  |
+| `grab`     | bool   | no       | Exclusive grab — other apps won't see events          |
+| `bindings` | object | no       | Map of `"KEY_NAME"` → `"shell command"`               |
+
+\* `match` may be omitted only for the wildcard id `"*"`.
+
+### Match criteria (first non-empty field wins)
+
+| Field            | Example                | Description                                     |
+|------------------|------------------------|-------------------------------------------------|
+| `path`           | `"/dev/input/event7"`  | Exact event node path                           |
+| `vendor_product` | `"046d:c08b"`          | USB vendor:product IDs (lowercase hex)          |
+| `name`           | `"Logitech G502"`      | Substring of the kernel device name             |
+
+Priority order: `path` → `vendor_product` → `name`.
+
+Use `vendor_product` or `name` in production so paths survive reboots.
+
+### Wildcard device
+
+A device with `"id": "*"` acts as a catch-all. Any key that has no binding in the event's specific device will fall back to the wildcard table.
+
+```json
+{
+  "id": "*",
+  "match": {},
   "bindings": {
-    "BTN_SIDE":    "notify-send 'PointerForce' 'Side button pressed'",
-    "BTN_EXTRA":   "xdg-open https://example.com",
-    "BTN_FORWARD": "playerctl next",
-    "BTN_BACK":    "playerctl previous",
-    "KEY_F13":     "scrot ~/screenshots/$(date +%s).png",
-    "KEY_F14":     "systemctl suspend"
+    "KEY_PAUSE": "notify-send 'Global' 'Pause pressed'"
   }
 }
 ```
 
-### Fields
-
-| Field      | Type    | Required | Default | Description |
-|------------|---------|----------|---------|-------------|
-| `device`   | string  | yes      | —       | Path to input device, e.g. `/dev/input/event5` |
-| `grab`     | bool    | no       | `false` | Exclusive grab — other apps won't see events |
-| `daemon`   | bool    | no       | `false` | Run as background daemon |
-| `debug`    | bool    | no       | `false` | Verbose logging to stdout |
-| `bindings` | object  | yes      | —       | Map of `"KEY_NAME"` -> `"shell command"` |
-
-### Supported Key Names
+### Supported key names
 
 PointerForce uses standard Linux key names from `<linux/input-event-codes.h>`:
 
-**Mouse/Pointer**
-`BTN_LEFT`, `BTN_RIGHT`, `BTN_MIDDLE`, `BTN_SIDE`, `BTN_EXTRA`, `BTN_FORWARD`, `BTN_BACK`
+**Mouse/Pointer:** `BTN_LEFT`, `BTN_RIGHT`, `BTN_MIDDLE`, `BTN_SIDE`, `BTN_EXTRA`, `BTN_FORWARD`, `BTN_BACK`
 
-**Keyboard**
-`KEY_A`-`KEY_Z`, `KEY_0`-`KEY_9`, `KEY_F1`-`KEY_F12`, `KEY_ENTER`, `KEY_SPACE`, `KEY_ESC`, `KEY_TAB`, `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_HOME`, `KEY_END`, `KEY_PAGEUP`, `KEY_PAGEDOWN`, `KEY_INSERT`, `KEY_DELETE`, `KEY_LEFTSHIFT`, `KEY_RIGHTSHIFT`, `KEY_LEFTCTRL`, `KEY_RIGHTCTRL`, `KEY_LEFTALT`, `KEY_RIGHTALT`, `KEY_LEFTMETA`, `KEY_RIGHTMETA`
+**Keyboard:** `KEY_A`–`KEY_Z`, `KEY_0`–`KEY_9`, `KEY_F1`–`KEY_F20`, `KEY_ENTER`, `KEY_SPACE`, `KEY_ESC`, `KEY_TAB`, `KEY_BACKSPACE`, `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_HOME`, `KEY_END`, `KEY_PAGEUP`, `KEY_PAGEDOWN`, `KEY_INSERT`, `KEY_DELETE`, `KEY_LEFTSHIFT`, `KEY_RIGHTSHIFT`, `KEY_LEFTCTRL`, `KEY_RIGHTCTRL`, `KEY_LEFTALT`, `KEY_RIGHTALT`, `KEY_LEFTMETA`, `KEY_RIGHTMETA`, `KEY_CAPSLOCK`, `KEY_PAUSE`, `KEY_SCROLLLOCK`, `KEY_NUMLOCK`
 
-**Media**
-`KEY_MUTE`, `KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, `KEY_PLAYPAUSE`, `KEY_NEXTSONG`, `KEY_PREVIOUSSONG`
+**Numpad:** `KEY_KP0`–`KEY_KP9`, `KEY_KPENTER`, `KEY_KPPLUS`, `KEY_KPMINUS`, `KEY_KPASTERISK`, `KEY_KPSLASH`, `KEY_KPDOT`
 
-**Gamepad**
-`BTN_SOUTH`, `BTN_EAST`, `BTN_NORTH`, `BTN_WEST`, `BTN_TL`, `BTN_TR`, `BTN_START`, `BTN_SELECT`
+**Media:** `KEY_MUTE`, `KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, `KEY_PLAYPAUSE`, `KEY_NEXTSONG`, `KEY_PREVIOUSSONG`
 
-To look up a code for an unlisted key, use `evtest` (see [Finding Your Device](#finding-your-device)).
+**Gamepad:** `BTN_SOUTH`, `BTN_EAST`, `BTN_NORTH`, `BTN_WEST`, `BTN_TL`, `BTN_TR`, `BTN_TL2`, `BTN_TR2`, `BTN_START`, `BTN_SELECT`, `BTN_THUMBL`, `BTN_THUMBR`, `BTN_MODE`
+
+For any unlisted key use `evtest` to find its name, then add it directly in your config.
 
 ---
 
@@ -146,42 +212,124 @@ To look up a code for an unlisted key, use `evtest` (see [Finding Your Device](#
 ### Foreground (debug) mode
 
 ```bash
-./PointerForce -f
-# or
-./PointerForce -f -c /path/to/your.json
+./pointerforce -f
+./pointerforce -f -c /path/to/config.json
 ```
 
-Press buttons — you'll see real-time output:
+Output:
 
 ```
-[config] device     : /dev/input/event5
-[config] grab       : false
-[config] bindings   : 4 entries
-[device] Opened: Logitech G502 HERO (/dev/input/event5)
-[mapper] Loaded 4 binding(s).
-[event] Loop started. Listening...
-[event] KEY BTN_SIDE (277) pressed
-[event] Executing: notify-send 'PointerForce' 'Side button pressed'
-[executor] Spawned PID 12483 for: notify-send ...
+[config] devices       : 2
+[device] Probed: Logitech G502 HERO (/dev/input/event5)
+[devicemgr] Matched 'gaming_mouse' → /dev/input/event5 (Logitech G502 HERO)
+[device] Probed: OLKB Planck (/dev/input/event8)
+[devicemgr] Matched 'macro_pad' → /dev/input/event8 (OLKB Planck)
+[mapper] Loaded 6 binding(s) across 2 device(s).
+[ctrl] Control server: /tmp/pointerforce.sock
+[main] Running with 2 device(s).
+[mux] Started. Waiting for events from 2 device(s).
+[mux] gaming_mouse → BTN_FORWARD (159)
+[mux] [gaming_mouse] Execute: playerctl next
 ```
 
 ### Daemon mode
 
 ```bash
-./PointerForce -d
+./pointerforce -d
 ```
 
-Or set `"daemon": true` in config and run without flags.
+Or set `"daemon": true` in config.
 
 ### CLI flags
 
-| Flag         | Description |
-|--------------|-------------|
-| `-c <file>`  | Path to config JSON (default: `config/PointerForce.json`) |
-| `-d`         | Force daemon mode (overrides config) |
-| `-f`         | Force foreground + debug mode (overrides config) |
-| `-v`         | Print version and exit |
-| `-h`         | Show help |
+| Flag        | Description                                          |
+|-------------|------------------------------------------------------|
+| `-c <file>` | Config file path (default: `config/pointerforce.json`) |
+| `-d`        | Force daemon mode                                    |
+| `-f`        | Force foreground + debug mode                        |
+| `-v`        | Print version and exit                               |
+| `-h`        | Show help                                            |
+
+---
+
+## pfctl – Control Client
+
+`pfctl` communicates with the running daemon via the control socket. All commands require the daemon to be running.
+
+### System overview
+
+```bash
+pfctl status
+```
+```
+Version    : 0.2.0
+Running    : yes
+Devices    : 2
+Bindings   : 6
+Config     : /etc/pointerforce.json
+```
+
+### List active devices
+
+```bash
+pfctl devices
+```
+```
+  [gaming_mouse]
+    path   : /dev/input/event5
+    name   : Logitech G502 HERO
+    active : yes
+  [macro_pad]
+    path   : /dev/input/event8
+    name   : OLKB Planck
+    active : yes
+```
+
+### List bindings
+
+```bash
+pfctl bindings               # all devices
+pfctl bindings gaming_mouse  # filtered by device id
+```
+```
+  [gaming_mouse] BTN_FORWARD  →  playerctl next
+  [gaming_mouse] BTN_BACK     →  playerctl previous
+  [macro_pad]    KEY_F13      →  scrot ~/screenshots/$(date +%s).png
+```
+
+### Add or replace a binding at runtime
+
+```bash
+pfctl bind gaming_mouse BTN_MIDDLE "xdotool click 2"
+```
+
+Takes effect immediately — no restart required.
+
+### Remove a binding at runtime
+
+```bash
+pfctl unbind gaming_mouse BTN_MIDDLE
+```
+
+### Live event stream
+
+```bash
+pfctl events
+```
+```
+Listening for events (Ctrl-C to quit)...
+[gaming_mouse] BTN_FORWARD  →  playerctl next
+[macro_pad]    KEY_F13      →  scrot ~/screenshots/...
+[gaming_mouse] BTN_SIDE
+```
+
+### Hot-reload config from disk
+
+```bash
+pfctl reload
+```
+
+Equivalent to sending SIGHUP. Reloads `pointerforce.json` and reinitialises all bindings in-process. Running device threads are unaffected.
 
 ---
 
@@ -193,15 +341,21 @@ List all input devices:
 cat /proc/bus/input/devices
 ```
 
-Or use `evtest` to identify the right event node and see live key codes:
+Identify the right node and see live key codes:
 
 ```bash
 sudo evtest
 ```
 
-Select your device from the list, then press buttons to see their names and codes. Use those names directly in your `bindings` config.
+Find USB vendor and product IDs for `vendor_product` matching:
 
-Stable device paths (survive reboots):
+```bash
+lsusb
+# e.g. Bus 001 Device 007: ID 046d:c08b Logitech, Inc.
+# → "046d:c08b"
+```
+
+Stable paths that survive reboots:
 
 ```bash
 ls -l /dev/input/by-id/
@@ -212,34 +366,19 @@ ls -l /dev/input/by-path/
 
 ## Permissions
 
-By default, `/dev/input/*` requires either `root` or the `input` group.
-
-Add your user to the `input` group (no root needed at runtime):
+`/dev/input/*` requires `root` or membership in the `input` group.
 
 ```bash
 sudo usermod -aG input $USER
-# Log out and back in for the change to take effect
-```
-
-Verify:
-
-```bash
-ls -l /dev/input/event5
-# crw-rw---- 1 root input ... /dev/input/event5
+# Log out and back in.
 ```
 
 ### Optional: udev rule
 
-For a specific device to always be accessible without group membership:
-
 ```
-# /etc/udev/rules.d/99-PointerForce.rules
+# /etc/udev/rules.d/99-pointerforce.rules
 SUBSYSTEM=="input", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c08b", MODE="0660", GROUP="input"
 ```
-
-Replace `idVendor` / `idProduct` with your device's values (found via `lsusb`).
-
-Reload rules:
 
 ```bash
 sudo udevadm control --reload-rules && sudo udevadm trigger
@@ -249,123 +388,165 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ## Systemd Service
 
-After `sudo make install`:
-
 ```bash
-# Enable and start
-sudo systemctl enable --now PointerForce
-
-# Check status
-sudo systemctl status PointerForce
-
-# View logs
-sudo journalctl -u PointerForce -f
-
-# Stop
-sudo systemctl stop PointerForce
+sudo systemctl enable --now pointerforce
+sudo systemctl status pointerforce
+sudo journalctl -u pointerforce -f
+sudo systemctl stop pointerforce
 ```
 
-The service runs as root by default. To run as a non-root user, edit `/etc/systemd/system/PointerForce.service` and set `User=yourname` with `Group=input`.
+To run as a non-root user add `User=yourname` and `Group=input` to the `[Service]` section of `/etc/systemd/system/pointerforce.service`.
 
 ---
 
 ## Runtime Reload
 
-Send SIGHUP to reload config without a full restart:
+Three equivalent ways to trigger an in-process config reload:
 
 ```bash
 scripts/reload.sh
-# or manually:
-kill -HUP $(cat /tmp/PointerForce.pid)
+kill -HUP $(cat /tmp/pointerforce.pid)
+pfctl reload
 ```
 
-In Phase 1, SIGHUP triggers a graceful shutdown so the service manager can restart the process with fresh config. Full in-process hot-reload is planned for Phase 2.
+The multiplexer detects the reload flag between events, re-reads `pointerforce.json`, and reinitialises the mapper. Device reader threads keep running throughout — no events are lost.
 
 ---
 
 ## Logging & Debugging
 
-In foreground/debug mode (`-f`), all output goes to stdout.
+In foreground/debug mode all output goes to stdout.
 
-In daemon mode, output is appended to `logs/PointerForce.log` (or `/var/log/PointerForce.log` when installed as a service).
+In daemon mode output is appended to `logs/pointerforce.log` (or `/var/log/pointerforce.log` when installed).
 
 ```bash
-tail -f logs/PointerForce.log
+tail -f /var/log/pointerforce.log
 ```
 
-### Useful diagnostic tools
+### Diagnostic tools
 
-| Tool       | Purpose |
-|------------|---------|
-| `evtest`   | Identify devices, inspect raw events, discover key codes |
-| `strace`   | Trace syscalls — diagnose open/ioctl/grab failures |
-| `lsusb`    | Find USB vendor/product IDs for udev rules |
-| `udevadm monitor` | Watch device hotplug events in real time |
+| Tool              | Purpose                                               |
+|-------------------|-------------------------------------------------------|
+| `evtest`          | Identify devices, inspect raw events, find key codes  |
+| `pfctl events`    | Live event stream from inside PointerForce            |
+| `pfctl status`    | Runtime overview                                      |
+| `strace`          | Trace syscalls — diagnose open/ioctl/grab failures    |
+| `lsusb`           | Find USB vendor/product IDs for matching              |
+| `udevadm monitor` | Watch device hotplug events                           |
 
 ---
 
 ## Edge Cases & Error Handling
 
-| Situation | Behaviour |
-|-----------|-----------|
-| Device path not found | Exits with error at startup |
-| Invalid JSON config | Exits with parse error message |
-| Unknown key name in bindings | Logs warning, skips that binding, continues |
-| Device disconnected at runtime | EIO detected, loop exits cleanly, PID removed |
-| Command execution failure | fork/exec errors logged; loop continues |
-| Duplicate instance | Detects live PID file, exits with message |
-| SIGTERM / SIGINT | Sets g_running=false, loop exits, PID file removed |
-| Exclusive grab failure | Logs warning, continues without grab (non-fatal) |
-| Empty bindings | Logs warning, starts anyway (useful for testing device detection) |
+| Situation                          | Behaviour                                                      |
+|------------------------------------|----------------------------------------------------------------|
+| No configured devices found        | Exits with error at startup                                    |
+| Device path not found at startup   | That device is skipped; others start normally                  |
+| Invalid JSON config                | Exits with parse error; reload failure keeps current config    |
+| Unknown key name in bindings       | Logs warning, skips that binding, continues                    |
+| Device disconnected at runtime     | Reader thread detects EIO, marks device inactive, exits thread |
+| Command execution failure          | fork/exec errors logged; multiplexer continues                 |
+| Duplicate instance                 | Detects live PID file, exits with message                      |
+| SIGTERM / SIGINT                   | `g_running = false`; multiplexer exits; all threads join       |
+| SIGHUP / `pfctl reload`            | `g_reload = true`; config reloaded between events in-process  |
+| Exclusive grab failure             | Logs warning, continues without grab (non-fatal)               |
+| Empty bindings on a device         | Logs warning, starts anyway                                    |
+| Control socket unavailable         | Logs warning, daemon continues without control plane           |
+| Concurrent `pfctl` clients         | Each handled in a separate detached thread                     |
 
 ---
 
 ## Project Structure
 
 ```
-PointerForce/
+pointerforce/
 ├── src/
-│   ├── main.cpp        # Entry point, CLI parsing, init flow
-│   ├── config.cpp      # JSON config loader and validator
-│   ├── device.cpp      # libevdev device open/grab/close
-│   ├── event.cpp       # EV_KEY event loop
-│   ├── mapper.cpp      # Key name <-> code tables, binding lookup
-│   ├── executor.cpp    # Non-blocking fork/exec command runner
-│   └── daemon.cpp      # Daemonise, PID file, signal handlers
+│   ├── main.cpp            Entry point, CLI parsing, init flow
+│   ├── config.cpp          JSON config loader (multi-device)
+│   ├── device.cpp          libevdev open/grab/close + match/vendor_product
+│   ├── devicemanager.cpp   Scan /dev/input, open matched devices, reader threads
+│   ├── eventqueue.cpp      Thread-safe multi-producer / single-consumer queue
+│   ├── multiplexer.cpp     Pop queue → device-aware lookup → execute + notify
+│   ├── mapper.cpp          Per-device binding tables, thread-safe, wildcard
+│   ├── executor.cpp        Non-blocking fork/exec command runner
+│   ├── daemon.cpp          Daemonise, PID file, signal handlers
+│   ├── control.cpp         Unix socket control server (JSON-lines)
+│   └── pfctl.cpp           Control client binary
 ├── include/
-│   ├── common.hpp      # Shared structs (Config, InputEvent), globals
+│   ├── common.hpp          Shared types (Config, DeviceConfig, InputEvent), globals
 │   ├── config.hpp
 │   ├── device.hpp
-│   ├── event.hpp
+│   ├── devicemanager.hpp
+│   ├── eventqueue.hpp
+│   ├── multiplexer.hpp
 │   ├── mapper.hpp
 │   ├── executor.hpp
-│   └── daemon.hpp
+│   ├── daemon.hpp
+│   └── control.hpp
 ├── config/
-│   └── pointerforce.json   # Example configuration
+│   └── pointerforce.json   Example configuration
 ├── scripts/
-│   └── reload.sh           # Send SIGHUP to running daemon
+│   └── reload.sh           Send SIGHUP to running daemon
 ├── logs/
-│   └── pointerforce.log    # Runtime log output
-├── PointerForce.service    # systemd unit file
+│   └── pointerforce.log    Runtime log (daemon mode)
+├── pointerforce.service    systemd unit file
 ├── Makefile
 └── README.md
 ```
 
+### Architecture
+
+```
+ /dev/input/*
+      │
+      ▼ (scan + match against config)
+ ┌─────────────────────────────┐
+ │       DeviceManager         │
+ │  ┌──────────┐ ┌──────────┐  │
+ │  │ Device A │ │ Device B │  │   one reader thread per device
+ │  └────┬─────┘ └────┬─────┘  │
+ └───────┼────────────┼────────┘
+         │            │
+         └─────┬──────┘
+               ▼
+         EventQueue          (thread-safe)
+               │
+               ▼
+      EventMultiplexer
+               │
+         ┌─────┴──────────┐
+         ▼                ▼
+       Mapper          Observers  ──→  ControlServer event-stream clients
+  (device-aware        (pfctl events)
+   binding lookup)
+         │
+         ▼
+      Executor
+   (fork + exec)
+         │
+         ▼
+   shell commands
+
+         ┌─────────────────────┐
+         │    ControlServer    │  (Unix socket / JSON-lines)
+         │  status / devices   │
+         │  bindings / bind    │
+         │  unbind / reload    │
+         │  events (stream)    │
+         └─────────────────────┘
+               ▲
+               │
+            pfctl
+```
+
 ---
 
-## Phase 2 Roadmap
+## Phase 3 Roadmap
 
-Phase 1 covers userspace event listening. Phase 2 moves deeper:
-
-- **Kernel input handler** — eBPF-based interception at the kernel level
-- **Event suppression** — swallow events before they reach other applications
 - **uinput injection** — synthesise and remap events at the virtual device level
-- **Full hot-reload** — in-process config reload without daemon restart
-- **Combo/sequence bindings** — chords, tap-vs-hold, double-tap
-- **Per-application profiles** — activate binding sets based on the focused window
-
----
-
-## License
-
-MIT. See `LICENSE` for details.
+- **Event suppression** — swallow events before they reach other applications (requires exclusive grab + uinput re-emit)
+- **Combo / sequence bindings** — chords, tap-vs-hold, double-tap, hold-repeat
+- **Per-application profiles** — activate binding sets based on the focused window (`_NET_ACTIVE_WINDOW`)
+- **eBPF input handler** — kernel-level interception for zero-latency suppression
+- **Web dashboard** — browser-based UI served over HTTP for remote control
+- **Device hotplug** — automatically open newly connected devices matching config

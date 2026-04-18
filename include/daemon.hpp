@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string>
-
 // ─────────────────────────────────────────────
 //  daemon.hpp : daemonise, PID file, lifecycle
 // ─────────────────────────────────────────────
@@ -11,20 +9,20 @@ namespace pf {
 class Daemon {
 public:
     // Fork into background, redirect stdio, set new session.
-    // Returns false if daemonisation fails (caller should exit).
     static bool daemonize();
 
-    // Write our PID to PID_FILE.  Returns false on failure.
+    // Write our PID to PID_FILE.
     static bool write_pid();
 
     // Remove PID_FILE on clean shutdown.
     static void remove_pid();
 
-    // Return true if another instance is already running
-    // (PID file exists and process is alive).
+    // Return true if another instance is already running.
     static bool is_running();
 
-    // Install SIGTERM / SIGINT handlers that set g_running = false.
+    // Install signal handlers:
+    //   SIGTERM / SIGINT → g_running = false
+    //   SIGHUP           → g_reload  = true  (in-process config reload)
     static void install_signal_handlers();
 };
 

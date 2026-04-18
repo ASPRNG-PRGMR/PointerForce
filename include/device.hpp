@@ -1,43 +1,52 @@
 #pragma once
 
+#include "common.hpp"
 #include <string>
 #include <libevdev/libevdev.h>
 
 // ─────────────────────────────────────────────
-//  device.hpp : open input device via libevdev
+//  device.hpp : open / grab / close one input device via libevdev
 // ─────────────────────────────────────────────
 
 namespace pf {
 
 class Device {
 public:
-    Device() = default;
-    ~Device();
+    Device()  = default;
+    ~Device() { close(); }
 
-    // Open device at path and initialise libevdev.
-    // Returns true on success.
+    // Non-copyable; moveable so DeviceManager can own entries in a vector.
+    Device(const Device&)            = delete;
+    Device& operator=(const Device&) = delete;
+    Device(Device&& o) noexcept;
+    Device& operator=(Device&& o) noexcept;
+
+    // Open device at path and initialise libevdev.  Returns true on success.
     bool open(const std::string& path);
 
-    // Optionally grab the device so no other process sees events.
+    // Exclusively grab the device (no other process sees events).
     bool grab();
     void ungrab();
 
     // Release fd and libevdev context.
     void close();
 
-    // True if device is open and ready.
-    bool is_open() const { return fd_ >= 0; }
+    bool             is_open() const { return fd_ >= 0; }
+    struct libevdev* dev()     const { return dev_;     }
+    std::string      path()    const { return path_;    }
+    const char*      name()    const;
 
-    // Underlying libevdev handle (used by EventLoop).
-    struct libevdev* dev() const { return dev_; }
+    // True if this opened device satisfies the given match criteria.
+    bool matches(const DeviceMatch& m) const;
 
-    // Human-readable name from the device.
-    const char* name() const;
+    // Read "VVVV:PPPP" from sysfs for this device.  Empty if unavailable.
+    std::string vendor_product() const;
 
 private:
-    int           fd_  = -1;
-    struct libevdev* dev_ = nullptr;
-    bool          grabbed_ = false;
+    int              fd_      = -1;
+    struct libevdev* dev_     = nullptr;
+    bool             grabbed_ = false;
+    std::string      path_;
 };
 
 } // namespace pf
