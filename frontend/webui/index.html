@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PointerForce</title>
+<link rel="stylesheet" href="style.css" />
+<script>
+  // Runs before CSS paints anything, so there's no flash of the wrong
+  // theme on load. Kept inline/separate from app.js on purpose.
+  (function () {
+    var saved = localStorage.getItem("pf-theme");
+    if (saved === "light" || saved === "dark") {
+      document.documentElement.setAttribute("data-theme", saved);
+    }
+  })();
+</script>
+</head>
+<body>
+<div class="app">
+
+  <div class="daemon-hero" id="daemonHero">
+    <svg viewBox="0 0 200 300" class="illo-mouse illo-pulse" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 5">
+      <path d="M100 8C136 8 162 24 174 58C186 92 188 130 182 168C176 206 182 244 158 270C138 291 118 298 100 298C82 298 62 291 42 270C18 244 24 206 18 168C12 130 14 92 26 58C38 24 64 8 100 8Z"></path>
+      <rect class="illo-wheel" x="90" y="26" width="20" height="42" rx="10" stroke-dasharray="0"></rect>
+    </svg>
+    <h2>Can't reach the mouse service</h2>
+    <p>PointerForce isn't connected to the background service that talks to your hardware. Make sure it's installed and running, then this page will reconnect automatically.</p>
+  </div>
+
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">&#9670;</span>
+      <span class="brand-name">pointerforce</span>
+    </div>
+
+    <nav class="tab-pill">
+      <button class="tab-btn active" id="tabDashboardBtn" data-tab="dashboard">dashboard</button>
+      <button class="tab-btn" id="tabConfigBtn" data-tab="config">config</button>
+    </nav>
+
+    <div class="topbar-right">
+      <div class="status-strip" id="statusStrip">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">connecting&hellip;</span>
+        <span class="status-sep">&middot;</span>
+        <span id="statusVersion">&mdash;</span>
+        <span class="status-sep">&middot;</span>
+        <span id="statusCounts">&mdash;</span>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" id="reloadBtn" title="Hot-reload pointerforce.json">
+          &#8635; reload config
+        </button>
+
+        <button class="theme-toggle" id="themeToggleBtn" title="Toggle light/dark theme" role="switch" aria-checked="false">
+          <span class="tt-icon tt-sun">&#9728;</span>
+          <span class="tt-icon tt-moon">&#9789;</span>
+          <span class="tt-thumb"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout" id="dashboardView">
+
+    <div class="left-column">
+    <aside class="panel devices-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">devices</h2>
+      </div>
+      <ul class="device-list" id="deviceList">
+        <li class="empty-state-illo">
+          <svg viewBox="0 0 200 300" class="illo-mouse illo-pulse" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 5">
+            <path d="M100 8C136 8 162 24 174 58C186 92 188 130 182 168C176 206 182 244 158 270C138 291 118 298 100 298C82 298 62 291 42 270C18 244 24 206 18 168C12 130 14 92 26 58C38 24 64 8 100 8Z"></path>
+            <rect class="illo-wheel" x="90" y="26" width="20" height="42" rx="10" stroke-dasharray="0"></rect>
+          </svg>
+          <p>loading&hellip;</p>
+        </li>
+      </ul>
+    </aside>
+
+    <aside class="panel mouse-panel">
+      <div class="mouse-visual-wrap">
+        <svg viewBox="0 0 240 340" class="mouse-visual" id="mouseSvg" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="rimGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.4)"></stop>
+              <stop offset="20%" stop-color="rgba(255,255,255,0.05)"></stop>
+              <stop offset="80%" stop-color="rgba(255,255,255,0.05)"></stop>
+              <stop offset="100%" stop-color="rgba(255,255,255,0.4)"></stop>
+            </linearGradient>
+            <linearGradient id="rimGradientLight" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(37,99,235,0.65)"></stop>
+              <stop offset="20%" stop-color="rgba(37,99,235,0.1)"></stop>
+              <stop offset="80%" stop-color="rgba(37,99,235,0.1)"></stop>
+              <stop offset="100%" stop-color="rgba(37,99,235,0.65)"></stop>
+            </linearGradient>
+          </defs>
+
+          <!-- body + thumb-rest flange -->
+          <path class="mouse-body" d="M120,20 C160,20 200,45 205,110 L205,210 C205,275 160,320 120,320 C80,320 65,305 45,280 C25,255 15,220 15,180 C15,140 25,120 35,110 C50,90 80,20 120,20 Z"></path>
+          <path class="mouse-rim" d="M120,20 C160,20 200,45 205,110 L205,210 C205,275 160,320 120,320 C80,320 65,305 45,280 C25,255 15,220 15,180 C15,140 25,120 35,110 C50,90 80,20 120,20 Z"></path>
+          <path class="mouse-accent-line" d="M45,110 Q55,200 45,280"></path>
+
+          <path class="mouse-zone" data-key="BTN_RIGHT" d="M125,25 L185,35 C195,65 195,100 195,140 L125,145 Z"></path>
+          <path class="mouse-zone" data-key="BTN_LEFT" d="M115,25 L55,35 C45,65 45,100 45,140 L115,145 Z"></path>
+
+          <rect class="mouse-zone mouse-wheel" data-key="BTN_MIDDLE" x="107" y="30" width="26" height="75" rx="12"></rect>
+          <rect class="mouse-wheel-inner" x="112" y="35" width="16" height="40" rx="8"></rect>
+        </svg>
+      </div>
+    </aside>
+    </div>
+
+    <section class="panel bindings-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          bindings <span class="panel-subtitle" id="bindingsScope">all devices</span>
+        </h2>
+        <button class="btn btn-accent" id="addBindingBtn">+ bind a key</button>
+      </div>
+
+      <div class="mouse-picker-info centered">
+        <div class="mpi-label">editing input</div>
+        <div class="mpi-key" id="editingKeyLabel">&mdash;</div>
+        <div class="mpi-current" id="editingCurrentLabel">click a button on the mouse to bind it &mdash; or use &ldquo;+ bind a key&rdquo; for other devices.</div>
+
+        <div class="mouse-extras">
+          <div class="mouse-extras-label">extra buttons on this mouse</div>
+          <div class="extra-toggle" data-extra="side1">
+            <label><input type="checkbox" id="extraSide1Toggle" /> side button</label>
+            <input type="text" id="extraSide1Key" class="extra-key-input" value="BTN_SIDE" hidden />
+          </div>
+          <div class="extra-toggle" data-extra="side2">
+            <label><input type="checkbox" id="extraSide2Toggle" /> second side button</label>
+            <input type="text" id="extraSide2Key" class="extra-key-input" value="BTN_EXTRA" hidden />
+          </div>
+          <div class="extra-toggle" data-extra="dpi">
+            <label><input type="checkbox" id="extraDpiToggle" /> dpi button</label>
+            <input type="text" id="extraDpiKey" class="extra-key-input" value="BTN_TASK" hidden />
+          </div>
+          <p class="mouse-extras-hint">tick the ones your mouse actually has, and correct the key name if the live events feed reports something else &mdash; DPI buttons especially vary by hardware.</p>
+        </div>
+      </div>
+
+      <form class="add-binding-form" id="addForm" hidden>
+        <div class="field">
+          <label for="fDevice">device</label>
+          <select id="fDevice" required></select>
+        </div>
+        <div class="field">
+          <label for="fKey">key / button</label>
+          <input id="fKey" type="text" placeholder="BTN_SIDE" required autocomplete="off" />
+        </div>
+        <div class="field field-wide">
+          <label for="fCommand">shell command</label>
+          <input id="fCommand" type="text" placeholder="notify-send 'Mouse' 'Side button'" required autocomplete="off" />
+        </div>
+        <div class="field-actions">
+          <button type="submit" class="btn btn-accent">save</button>
+          <button type="button" class="btn btn-ghost" id="cancelAddBtn">cancel</button>
+        </div>
+        <p class="form-error" id="formError" hidden></p>
+      </form>
+
+      <div class="bindings-table-wrap">
+        <table class="bindings-table">
+          <thead>
+            <tr>
+              <th>device</th>
+              <th>key</th>
+              <th>command</th>
+              <th class="col-action"></th>
+            </tr>
+          </thead>
+          <tbody id="bindingsBody"></tbody>
+        </table>
+        <p class="empty-state" id="bindingsEmpty" hidden>stock mouse, zero rigged buttons &mdash; hit &ldquo;+ bind a key&rdquo; and give it a job.</p>
+      </div>
+    </section>
+
+    <aside class="panel events-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">live events</h2>
+        <span class="live-indicator" id="liveIndicator">
+          <span class="live-dot" id="liveDot"></span>
+          <span id="liveLabel">connecting</span>
+        </span>
+      </div>
+      <div class="events-body">
+        <div class="event-ticker" id="eventTicker">
+          <div class="empty-state-illo illo-lg">
+            <svg viewBox="0 0 200 300" class="illo-mouse illo-pulse" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 5">
+              <path d="M100 8C136 8 162 24 174 58C186 92 188 130 182 168C176 206 182 244 158 270C138 291 118 298 100 298C82 298 62 291 42 270C18 244 24 206 18 168C12 130 14 92 26 58C38 24 64 8 100 8Z"></path>
+              <rect class="illo-wheel" x="90" y="26" width="20" height="42" rx="10" stroke-dasharray="0"></rect>
+            </svg>
+            <p>waiting for the first event&hellip;</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <div class="devices-modal-overlay" id="devicesModalOverlay" hidden>
+    <div class="devices-modal" role="dialog" aria-modal="true" aria-labelledby="devicesModalTitle">
+      <div class="events-modal-header">
+        <h2 id="devicesModalTitle">all devices <span class="panel-subtitle" id="devicesModalCount">&mdash;</span></h2>
+        <button class="btn btn-ghost" id="devicesModalCloseBtn">close &#10005;</button>
+      </div>
+      <ul class="devices-modal-list" id="devicesModalList"></ul>
+    </div>
+  </div>
+
+  <main class="config-view" id="configView" hidden>
+
+    <section class="panel config-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          config file <span class="panel-subtitle" id="configPathLabel">&mdash;</span>
+        </h2>
+        <div class="config-header-actions">
+          <button class="btn btn-ghost" id="toggleRawBtn">raw json</button>
+          <button class="btn btn-accent" id="reloadDaemonBtn">&#8635; reload daemon</button>
+        </div>
+      </div>
+
+      <p class="config-hint">
+        Changes here are saved to disk but <strong>not applied</strong> until you hit
+        &ldquo;reload daemon&rdquo; &mdash; write, review, then apply.
+      </p>
+
+      <div id="configStructured">
+        <div class="device-config-list" id="deviceConfigList"></div>
+
+        <button class="btn btn-accent" id="addDeviceBtn">+ add device</button>
+
+        <form class="add-device-form" id="addDeviceForm" hidden>
+          <div class="field">
+            <label for="dfId">device id</label>
+            <input id="dfId" type="text" placeholder="foot_pedal" required autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="dfMatchType">match by</label>
+            <select id="dfMatchType">
+              <option value="name">name (substring)</option>
+              <option value="vendor_product">vendor_product (vvvv:pppp)</option>
+              <option value="path">path (/dev/input/eventN)</option>
+            </select>
+          </div>
+          <div class="field field-wide">
+            <label for="dfMatchValue">match value</label>
+            <input id="dfMatchValue" type="text" placeholder="Logitech G502" required autocomplete="off" />
+          </div>
+          <div class="field field-checkbox">
+            <label for="dfGrab"><input id="dfGrab" type="checkbox" /> exclusive grab</label>
+          </div>
+          <div class="field-actions">
+            <button type="submit" class="btn btn-accent">add device</button>
+            <button type="button" class="btn btn-ghost" id="cancelAddDeviceBtn">cancel</button>
+          </div>
+          <p class="form-error" id="addDeviceError" hidden></p>
+        </form>
+      </div>
+
+      <div id="configRaw" hidden>
+        <textarea id="rawJsonTextarea" spellcheck="false" rows="20"></textarea>
+        <div class="raw-json-actions">
+          <span class="raw-json-status" id="rawJsonStatus"></span>
+          <button class="btn btn-accent" id="saveRawBtn">save raw json</button>
+          <button class="btn btn-ghost" id="revertRawBtn">revert</button>
+        </div>
+      </div>
+
+      <pre class="reload-output" id="reloadOutput" hidden></pre>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <div class="events-modal-overlay" id="eventsModalOverlay" hidden>
+    <div class="events-modal" role="dialog" aria-modal="true" aria-labelledby="eventsModalTitle">
+      <div class="events-modal-header">
+        <h2 id="eventsModalTitle">all events <span class="panel-subtitle" id="eventsModalCount">&mdash;</span></h2>
+        <button class="btn btn-ghost" id="eventsModalCloseBtn">close &#10005;</button>
+      </div>
+      <div class="events-modal-columns" id="eventsModalColumns"></div>
+    </div>
+  </div>
+
+  <div class="corner-readout left">
+    <span>VERSION: 1.67</span>
+    <span>TRANSPORT: UNIX SOCKET</span>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

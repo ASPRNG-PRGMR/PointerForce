@@ -3,7 +3,7 @@ CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -Iinclude -pthread \
             $(shell pkg-config --cflags libevdev jsoncpp)
 LIBS     := $(shell pkg-config --libs libevdev jsoncpp) -pthread
 
-DAEMON_TARGET := run_pointerforce
+DAEMON_TARGET := run_backend
 CTL_TARGET    := pfctl
 
 SRCDIR := src

@@ -15,6 +15,7 @@ PointerForce listens to raw input devices via `libevdev`, maps key/button presse
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [pfctl – Control Client](#pfctl--control-client)
+- [Web UI](#web-ui)
 - [Finding Your Device](#finding-your-device)
 - [Permissions](#permissions)
 - [Systemd Service](#systemd-service)
@@ -39,6 +40,7 @@ PointerForce listens to raw input devices via `libevdev`, maps key/button presse
 - **Full in-process hot-reload** — SIGHUP or `pfctl reload` reloads config without restarting or dropping devices
 - **Control plane** — Unix socket server; `pfctl` client for runtime status, inspection, and binding modification
 - **Live event stream** — `pfctl events` shows every key press in real time
+- **Web UI** — browser dashboard ([`frontend/`](./frontend/)) for status, device/binding management, live events, and config editing, without needing a terminal
 
 ---
 
@@ -333,6 +335,248 @@ Equivalent to sending SIGHUP. Reloads `pointerforce.json` and reinitialises all 
 
 ---
 
+## Web UI
+
+PointerForce ships with a browser-based dashboard, [`frontend/`](./frontend/) —
+this is the "Web dashboard" item from the Phase 3 roadmap below, now built
+rather than planned. It's not a bolt-on extra maintained separately: it's
+part of this repository, this README, and this system, the same as `pfctl`
+is.
+
+(This section used to be `frontend/README.md`, its own separate file. It's
+merged in here now — there's one README for the whole system. If you still
+have a copy of that file lying around, delete it; this is the current
+version.)
+
+### How it works
+
+`frontend/` is a Drogon (C++) backend bridge plus a static HTML/CSS/JS
+frontend (no build step). The bridge connects directly to the same Unix
+control socket `pfctl` does, speaking the JSON-lines protocol in
+`control.cpp` itself via `ControlClient` — not by shelling out to `pfctl`
+as a subprocess. So it needs the `pointerforce` daemon running, but not
+`pfctl` installed on whatever machine serves the dashboard.
+
+```
+ browser  <--HTTP/SSE-->  frontend bridge (Drogon)  <--Unix socket, JSON-lines-->  pointerforce daemon
+```
+
+Connecting to the control socket directly rather than shelling out to
+`pfctl` fixes two concrete things, not just "one less moving part":
+
+- No dependency on `pfctl` being installed or on `PATH` for the bridge to
+  work at all.
+- No scraping `pfctl`'s human-readable text output. Every field in the
+  HTTP API comes straight from the daemon's own JSON, so a future change
+  to `pfctl`'s pretty-printing can't silently break this bridge — that was
+  a real, documented risk with the earlier `pfctl`-shelling design this
+  replaced.
+
+It also means the bridge can read `control_socket` out of the same config
+file `ConfigStore` already resolves, rather than being stuck with
+`pfctl.cpp`'s hardcoded `/tmp/pointerforce.sock` — see "Which config file
+gets edited" below for why that mismatch mattered.
+
+### Requirements
+
+- The `pointerforce` daemon already built and running (see Building/Usage
+  above) — its control socket is all this needs.
+- Build tools: `cmake`, a C++17 compiler, and the Drogon framework.
+
+On Debian/Ubuntu:
+
+```bash
+sudo apt install build-essential cmake libdrogon-dev libjsoncpp-dev \
+                  libpq-dev libsqlite3-dev libmysqlclient-dev libhiredis-dev \
+                  libyaml-cpp-dev
+```
+
+(Drogon's CMake config pulls in the Postgres/MySQL/SQLite/Redis client
+headers even though this only uses Drogon's HTTP server — that's Drogon's
+own `find_package`, not something this project needs directly.)
+
+### Building & running
+
+```bash
+cd frontend
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j"$(nproc)"
+./pointerforce-frontend
+```
+
+Then open `http://localhost:8081`.
+
+The binary must be run from `frontend/build/` (or any directory where
+`../webui` resolves to `frontend/webui`) since it serves the static
+frontend from a relative path. If you want to run it from elsewhere, edit
+the `app().setDocumentRoot(...)` call in `main.cpp`. `make.sh`, which now
+lives directly in `frontend/` (not inside `build/` — it creates `build/`
+itself now), automates this build, sets up the shared `config/` symlink
+described below, and generates a `run_frontend` launcher at the project
+root so you don't have to `cd` there by hand every time.
+
+### What the UI does
+
+| Panel        | What it shows / does                                              |
+|--------------|---------------------------------------------------------------------|
+| Top bar      | Daemon status, version, device/binding counts, hot-reload button   |
+| Devices      | Every matched device, its path/name, and whether it's active; click one to filter the bindings table |
+| Bindings     | Every key → command binding; add new ones inline, or unbind existing ones; an interactive on-screen mouse doubles as the binding editor — click a zone to bind it |
+| Live events  | A real-time feed straight from the control socket's `events` stream, with the matching binding row flashing when it fires |
+| Config tab   | Structured editor for `pointerforce.json`'s device blocks (id, match, grab) — add/edit/delete — plus a raw-JSON toggle for anything else (`daemon`, `debug`, `control_socket`, bulk binding edits). Saves write to disk only; a separate "reload daemon" button applies them and shows the result. |
+
+Adding/removing bindings takes effect immediately, the same as running
+`pfctl bind` / `pfctl unbind` by hand — no restart, no daemon interruption.
+
+### API reference
+
+All endpoints are relative to the bridge server (default `:8081`).
+
+| Method | Path            | Body                                   | Notes                        |
+|--------|-----------------|-----------------------------------------|-------------------------------|
+| GET    | `/api/status`   | —                                        | `{"cmd":"status"}` over the control socket, as JSON |
+| GET    | `/api/devices`  | —                                        | `{"cmd":"devices"}`, as JSON  |
+| GET    | `/api/bindings` | —                                        | `{"cmd":"bindings"}`, as JSON |
+| POST   | `/api/bind`     | `{ "device", "key", "command" }`         | `{"cmd":"bind", ...}`         |
+| POST   | `/api/unbind`   | `{ "device", "key" }`                    | `{"cmd":"unbind", ...}`       |
+| GET    | `/api/events`   | —                                        | Server-Sent Events, sourced from the control socket's live `events` stream |
+| POST   | `/api/reload`   | —                                        | `{"cmd":"reload"}`            |
+| GET    | `/api/config`   | —                                        | Reads and parses `pointerforce.json`, returns `{ path, config, warning? }` |
+| PUT    | `/api/config`   | `{ "config": {...} }` or raw config object | Validates shape, writes atomically. Does **not** reload the daemon. |
+| POST   | `/api/config/device`   | `{ "id", "match", "grab"?, "bindings"? }` | Appends a new device block to config |
+| PUT    | `/api/config/device/:id` | `{ "match"?, "grab"? }`         | Edits an existing device block's match/grab. Bindings still go through `/api/bind` (live). |
+| DELETE | `/api/config/device/:id` | —                                | Removes a device block from config |
+
+All socket communication goes through `ControlClient` (`frontend/services/`),
+a plain `AF_UNIX` client speaking the same JSON-lines protocol
+`control.cpp` implements — connect, send one `{"cmd": ...}` line, read one
+`{"ok": ...}` line back, close. `events` is the exception: after the
+request line, the connection stays open and the daemon streams one event
+object per line until the client disconnects, which is exactly what backs
+the SSE endpoint above.
+
+### Which config file gets edited
+
+The config-file endpoints (`GET`/`PUT /api/config` and everything under
+`/api/config/device`) don't go through the control socket at all — there's
+no command for structural edits, only live bindings — so they read/write
+`pointerforce.json` directly, at a **fixed** path: `config/pointerforce.json`,
+relative to wherever the bridge process's working directory is (same
+resolution rule as `setDocumentRoot("../webui")` for the static frontend).
+
+This assumes the deployment layout where a `PointerForce/` root holds the
+daemon, the web UI, and a single shared `config/` directory:
+
+```
+PointerForce/
+├── config/
+│   └── pointerforce.json
+├── run_frontend                 ← launcher; cd's into frontend/build before exec
+└── frontend/
+    ├── webui/                   (static index.html / app.js / style.css)
+    └── build/
+        ├── config -> ../../config   (symlink, set up by make.sh)
+        └── pointerforce-frontend    (this binary)
+```
+
+Run the binary from anywhere else without that symlink in place, and
+`/api/config` will fail with a clear "cannot open 'config/pointerforce.json'"
+rather than silently editing the wrong file.
+
+This was previously auto-detected per-request via `pfctl status`'s
+`Config:` line, which meant the file the editor wrote to and the file the
+daemon actually loaded (whatever `-c` it happened to be started with)
+were two independent things that could silently drift apart. Pinning both
+to the same relative path removes that drift *if* the daemon is started
+with `-c config/pointerforce.json` (or an absolute path to the same file
+through the symlink) — but they can still disagree if the daemon is
+started some other way, so this is checked, not just assumed: every
+config response includes an optional `warning` field, set whenever the
+control socket is reachable and `status` reports a config path that
+doesn't match the one this editor just used (`ConfigStore::daemonPathWarning()`).
+No warning means either they agree, or the daemon isn't running (nothing
+to check yet) — not a guarantee everything's correctly wired the first time.
+
+**One known blind spot in that check, worth knowing about:** the
+comparison canonicalizes both paths against *this bridge process's* CWD.
+If the daemon reports a relative path too (e.g. it was also started with
+a relative `-c`, from a different working directory than the bridge's),
+both sides can print the identical string while actually pointing at two
+different files on disk — and the check will see matching strings and
+report no warning. This is exactly the failure mode that cost real
+debugging time before it was caught live: `pfctl status` said
+`config/pointerforce.json`, which looked fine, but which file that
+actually was depended entirely on what directory the daemon happened to
+be launched from. Always launch the daemon with `-c` pointed at an
+**absolute** path if you want this check to be trustworthy, not just a
+relative one that happens to render the same.
+
+If you need per-instance or environment-driven config paths later,
+`ConfigStore::resolvePath()` is the one place that decides this — it's a
+single method specifically so that's a self-contained change.
+
+### Known limitations (minimal-viable, by design)
+
+- No auth — this is meant to sit behind your own network/reverse proxy the
+  same way you'd guard SSH or direct access to the control socket, not to
+  be exposed publicly.
+- No HTTPS — terminate TLS in front of it (nginx/Caddy) if you need it
+  reachable outside localhost.
+- Config-path mismatch detection has a real blind spot when both the
+  bridge and the daemon are launched with *relative* `-c` paths from
+  different working directories — see "Which config file gets edited"
+  above. Not theoretical; this is exactly what happened during initial
+  testing.
+- No systemd unit included yet for the bridge itself — run it under
+  `screen`/`tmux`, or write a small unit file analogous to
+  `pointerforce.service` if you want it to survive reboots.
+
+### Next steps
+
+**Windows port.** The near-term goal is a Windows build of PointerForce
+itself, at which point this web UI's `ControlClient` would connect
+directly to whatever control-plane socket that build exposes — no `pfctl`
+involved anywhere, on either platform. One upside worth noting: Windows 10
+(build 17063+) and Windows 11 both support `AF_UNIX` sockets via
+`afunix.h`, so `ControlClient` as written might port with fairly small
+changes rather than needing a named-pipe rewrite — untested, but worth
+checking before assuming a bigger rewrite is needed. Rough mapping from
+the current Linux/evdev design for everything else:
+
+| Linux (evdev) | Windows |
+|---|---|
+| `/dev/input/eventN`<br>(fd, blocking read) | `HANDLE` from Raw Input,<br>delivered via `WM_INPUT` messages |
+| `match.vendor_product`<br>`046d:c08b` | VID/PID parsed from the Raw Input device name,<br>or `RID_DEVICE_INFO.dwVendorId` / `dwProductId` |
+| `match.path`<br>`/dev/input/by-id/...` | Raw Input device instance path, e.g.<br>`\\?\HID#VID_046D&PID_C08B&MI_00#7&2a1e3f9&0&0000#{...}` |
+| `match.name` | HID product string via SetupAPI,<br>or the friendly device name |
+| `grab: true`<br>(exclusive grab) | **No direct equivalent.**<br>Raw Input observes input but cannot suppress it.<br><br>For suppression use:<br>- `WH_MOUSE_LL` / `WH_KEYBOARD_LL` (user-mode)<br>- Signed kernel filter driver (e.g. Interception) |
+| Reader thread<br>per device | Single message-loop thread processing `WM_INPUT`.<br>The downstream mux → mapper → executor pipeline remains unchanged. |  
+
+\
+Device identification specifically is confirmed feasible:
+`GetRawInputDeviceList()` enumerates connected devices, and
+`GetRawInputDeviceInfoW(hDevice, RIDI_DEVICENAME, ...)` returns the HID
+instance path above — VID/PID and a port-stable path in one string, same
+role as `match.vendor_product`/`match.path` today. Two identical devices
+off the same production line still collide on VID/PID, same caveat as
+Linux, same reason the `path` tiebreaker exists.
+
+Before committing design time: write a small scratch program that
+enumerates connected devices and prints VID/PID + instance path, to
+confirm on real hardware which of the target devices resolve to distinct,
+stable identifiers. (See the Phase 3 Roadmap below too — this Windows work
+and several daemon-side items there are related but independent efforts.)
+
+**Other:**
+
+- Wire the final visual design into `frontend/` once ready — current styling
+  is a placeholder dark-terminal theme, not the intended final look.
+- Add a systemd unit for the bridge server itself (see Known limitations
+  above).
+
+---
+
 ## Finding Your Device
 
 List all input devices:
@@ -459,21 +703,21 @@ tail -f /var/log/pointerforce.log
 ## Project Structure
 
 ```
-pointerforce/
+PointerForce/
 ├── src/
-│   ├── main.cpp            Entry point, CLI parsing, init flow
-│   ├── config.cpp          JSON config loader (multi-device)
-│   ├── device.cpp          libevdev open/grab/close + match/vendor_product
-│   ├── devicemanager.cpp   Scan /dev/input, open matched devices, reader threads
-│   ├── eventqueue.cpp      Thread-safe multi-producer / single-consumer queue
-│   ├── multiplexer.cpp     Pop queue → device-aware lookup → execute + notify
-│   ├── mapper.cpp          Per-device binding tables, thread-safe, wildcard
-│   ├── executor.cpp        Non-blocking fork/exec command runner
-│   ├── daemon.cpp          Daemonise, PID file, signal handlers
-│   ├── control.cpp         Unix socket control server (JSON-lines)
-│   └── pfctl.cpp           Control client binary
+│   ├── main.cpp              Entry point, CLI parsing, init flow
+│   ├── config.cpp            JSON config loader (multi-device)
+│   ├── device.cpp            libevdev open/grab/close + match/vendor_product
+│   ├── devicemanager.cpp     Scan /dev/input, open matched devices, reader threads
+│   ├── eventqueue.cpp        Thread-safe multi-producer / single-consumer queue
+│   ├── multiplexer.cpp       Pop queue → device-aware lookup → execute + notify
+│   ├── mapper.cpp            Per-device binding tables, thread-safe, wildcard
+│   ├── executor.cpp          Non-blocking fork/exec command runner
+│   ├── daemon.cpp            Daemonise, PID file, signal handlers
+│   ├── control.cpp           Unix socket control server (JSON-lines)
+│   └── pfctl.cpp             Control client binary
 ├── include/
-│   ├── common.hpp          Shared types (Config, DeviceConfig, InputEvent), globals
+│   ├── common.hpp            Shared types (Config, DeviceConfig, InputEvent), globals
 │   ├── config.hpp
 │   ├── device.hpp
 │   ├── devicemanager.hpp
@@ -484,14 +728,16 @@ pointerforce/
 │   ├── daemon.hpp
 │   └── control.hpp
 ├── config/
-│   └── pointerforce.json   Example configuration
+│   └── pointerforce.json      Example configuration
 ├── scripts/
-│   └── reload.sh           Send SIGHUP to running daemon
+│   └── reload.sh              Send SIGHUP to running daemon
 ├── logs/
-│   └── pointerforce.log    Runtime log (daemon mode)
-├── pointerforce.service    systemd unit file
+│   └── pointerforce.log       Runtime log (daemon mode)
+├── service    
+│   └── pointerforce.service   systemd unit file
 ├── Makefile
-└── README.md
+├── README.md
+└── frontend/                  Browser dashboard — see Web UI above
 ```
 
 ### Architecture
@@ -536,7 +782,12 @@ pointerforce/
          └─────────────────────┘
                ▲
                │
-            pfctl
+        ┌──────┴───────┐
+        │              │
+     pfctl           frontend
+  (terminal)     (ControlClient, direct
+                  socket connection —
+                  no pfctl involved)
 ```
 
 ---
@@ -548,5 +799,5 @@ pointerforce/
 - **Combo / sequence bindings** — chords, tap-vs-hold, double-tap, hold-repeat
 - **Per-application profiles** — activate binding sets based on the focused window (`_NET_ACTIVE_WINDOW`)
 - **eBPF input handler** — kernel-level interception for zero-latency suppression
-- **Web dashboard** — browser-based UI served over HTTP for remote control
 - **Device hotplug** — automatically open newly connected devices matching config
+- ~~**Web dashboard** — browser-based UI served over HTTP for remote control~~ — done, see [Web UI](#web-ui)

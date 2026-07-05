@@ -1,59 +1,20 @@
 {
-  "daemon": false,
-  "debug": true,
-  "control_socket": "/tmp/pointerforce.sock",
-
-  "devices": [
+  "control_socket" : "/tmp/pointerforce.sock",
+  "daemon" : false,
+  "debug" : true,
+  "devices" : 
+  [
     {
-      "id": "gaming_mouse",
-      "match": {
-        "name": "2.4G Wireless Mouse"
+      "bindings" : 
+      {
+        "BTN_EXTRA" : "xdg-open https://youtube.com",
+        "BTN_SIDE" : "notify-send 'PointerForce' 'mouse side button'"
       },
-      "grab": false,
-      "bindings": {
-        "BTN_SIDE":    "notify-send 'PointerForce' 'mouse side button'",
-        "BTN_EXTRA":   "xdg-open https://youtube.com"
-      }
-    },
-
-    {
-      "id": "macro_pad",
-      "match": {
-        "vendor_product": "04d9:0348"
-      },
-      "grab": true,
-      "bindings": {
-        "KEY_F13": "scrot ~/screenshots/$(date +%s).png",
-        "KEY_F14": "systemctl suspend",
-        "KEY_F15": "notify-send 'Macro' 'F15 fired'",
-        "KEY_F16": "xdotool key super+l"
-      }
-    },
-
-    {
-      "id": "foot_pedal",
-      "match": {
-        "path": "/dev/input/event7"
-      },
-      "grab": false,
-      "bindings": {
-        "BTN_LEFT":   "xdotool key ctrl+z",
-        "BTN_MIDDLE": "xdotool key ctrl+y",
-        "BTN_RIGHT":  "xdotool key ctrl+s"
-      }
-    },
-
-    {
-      "id": "gamepad",
-      "match": {
-        "name": "Microsoft X-Box"
-      },
-      "grab": false,
-      "bindings": {
-        "BTN_SOUTH":  "notify-send 'Gamepad' 'A pressed'",
-        "BTN_NORTH":  "notify-send 'Gamepad' 'Y pressed'",
-        "BTN_START":  "notify-send 'Gamepad' 'Start'",
-        "BTN_SELECT": "notify-send 'Gamepad' 'Select'"
+      "grab" : false,
+      "id" : "gaming_mouse",
+      "match" : 
+      {
+        "name" : "BT5.1 Mouse"
       }
     }
   ]
