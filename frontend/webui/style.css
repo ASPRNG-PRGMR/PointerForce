@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;900&display=swap');
 
 :root {
   --bg:                 #131313;
@@ -25,9 +25,9 @@
   --scrollbar-hover:     #3a3939;
   --accent-text-on-btn:  #003543;
 
-  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --headline: 'Space Grotesk', var(--mono);
-  --body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'League Spartan', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --headline: 'League Spartan', var(--mono);
+  --body: 'League Spartan', ui-sans-serif, system-ui, sans-serif;
   --radius: 8px;
   --radius-lg: 12px;
 }
