@@ -8,8 +8,8 @@
   --panel-high:          #2a2a2a;
   --line:                #3c494e;
   --text:                #e5e2e1;
-  --text-dim:             #bbc9cf;
-  --text-mute:            #859399;
+  --text-dim:             #c9c4c1;
+  --text-mute:            #948e8a;
   --primary:              #a5e7ff;
   --primary-container:    #00d2ff;
   --tertiary:             #00f5ff;
@@ -17,6 +17,7 @@
   --glow-rgb:             0, 245, 255;
   --warn:                 #ffb454;
   --danger:               #ffb4ab;
+  --danger-rgb:           255, 180, 171;
 
   /* previously hardcoded one-off colors, pulled out so light mode can
      override them too */
@@ -33,31 +34,33 @@
 }
 
 /* ---------- light theme ---------- */
-/* Toggled by app.js setting data-theme="light" on <html>. This is the
-   "Clinical Lab" light palette supplied as a reference file: a cool
-   slate/blue scale (Tailwind slate-50..300) with a single blue accent
-   (#2563EB) standing in for both primary and tertiary/glow duty, since
-   the reference uses one accent color for everything instead of a
-   separate neon "tertiary". --glow-rgb feeds every glow/drop-shadow that
-   used to be hardcoded neon cyan, so those now render as blue here
-   instead of reading as a leftover dark-mode color. */
+/* Toggled by app.js setting data-theme="light" on <html>. Originally a
+   cool slate/blue scale (Tailwind slate-50..300); the neutrals were
+   warmed to a stone-toned scale afterward since the cool white/slate
+   combo read as glary on screen for long stretches. The single blue
+   accent (#2563EB), standing in for both primary and tertiary/glow duty,
+   is unchanged - the reference uses one accent color for everything
+   instead of a separate neon "tertiary". --glow-rgb feeds every
+   glow/drop-shadow that used to be hardcoded neon cyan, so those now
+   render as blue here instead of reading as a leftover dark-mode color. */
 [data-theme="light"] {
-  --bg:                 #f8fafc;
-  --panel:               #ffffff;
-  --panel-alt:           #f1f5f9;
-  --panel-lowest:        #e2e8f0;
-  --panel-high:          #cbd5e1;
-  --line:                #e2e8f0;
-  --text:                #0f172a;
-  --text-dim:             #475569;
-  --text-mute:            #64748b;
+  --bg:                 #faf9f7;
+  --panel:               #fffefc;
+  --panel-alt:           #f9f7f4;
+  --panel-lowest:        #f3f1ec;
+  --panel-high:          #e6e1d8;
+  --line:                #ece8e1;
+  --text:                #221f1b;
+  --text-dim:             #5c564d;
+  --text-mute:            #837c72;
   --primary:              #3b82f6;
   --primary-container:    #2563eb;
   --tertiary:             #2563eb;
   --tertiary-dim:         #1e40af;
   --glow-rgb:             37, 99, 235;
-  --warn:                 #b45309;
-  --danger:               #c4342a;
+  --warn:                 #d97706;
+  --danger:               #dc2626;
+  --danger-rgb:           220, 38, 38;
 
   --glass-bg:            rgba(255, 255, 255, 0.9);
   --hover-bg:            #f1f5f9;
@@ -142,9 +145,8 @@ button, input, select, textarea {
   align-items: center;
   gap: 8px;
   font-family: var(--headline);
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .brand-mark {
@@ -194,7 +196,7 @@ button, input, select, textarea {
 
 .status-dot.bad {
   background: var(--danger);
-  box-shadow: 0 0 8px rgba(255, 180, 171, 0.6);
+  box-shadow: 0 0 8px rgba(var(--danger-rgb), 0.6);
 }
 
 /* breathing glow: shared by status-dot.ok and live-dot.on so every
@@ -221,10 +223,9 @@ button, input, select, textarea {
   border-radius: var(--radius);
   cursor: pointer;
   font-family: var(--headline);
-  font-weight: 500;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
   transition: color 0.15s, background 0.15s, box-shadow 0.2s, transform 0.1s;
 }
 
@@ -324,7 +325,7 @@ button, input, select, textarea {
 
 .btn-danger:hover {
   color: var(--danger);
-  background: rgba(255, 180, 171, 0.08);
+  background: rgba(var(--danger-rgb), 0.08);
 }
 
 .btn:disabled {
@@ -785,25 +786,26 @@ html, body, .panel, .btn, .event-key, .toast {
 }
 
 [data-theme="light"] .mouse-zone:hover {
-  fill: #eef4ff;
-  stroke: rgba(var(--glow-rgb), 0.4);
+  fill: #eef0fd;
+  stroke: rgba(61, 85, 201, 0.4);
 }
 
 [data-theme="light"] .mouse-zone.bound {
-  fill: #eaf1ff;
-  stroke: var(--tertiary-dim);
+  fill: #e6eafd;
+  stroke: #4a5fc9;
   stroke-width: 1.5;
 }
 
 [data-theme="light"] .mouse-zone.active {
-  /* was fill:#ffffff, indistinguishable from the mouse body around it -
-     a plain white shape with a thin stroke and soft shadow reads fine on
-     dark mode's near-black backdrop but disappears on a white one. Use a
-     visible tinted fill plus a bold, fully-opaque stroke instead. */
-  fill: rgba(var(--glow-rgb), 0.10);
-  stroke: var(--tertiary);
+  /* previously a low-opacity tint (rgba over the body), which let the
+     mouse's underlying body/rim seam lines show through since the shapes
+     aren't a perfectly flush single silhouette. An opaque fill covers
+     that cleanly. Hue also shifted warmer - more indigo, less cyan -
+     per feedback that the cool blue read as icy rather than warm. */
+  fill: #dde3fc;
+  stroke: #3d55c9;
   stroke-width: 2.5;
-  filter: drop-shadow(0 0 16px rgba(var(--glow-rgb), 0.5));
+  filter: drop-shadow(0 0 16px rgba(61, 85, 201, 0.55));
 }
 
 [data-theme="light"] .mouse-wheel {
@@ -1499,7 +1501,7 @@ html, body, .panel, .btn, .event-key, .toast {
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-.toast.error { color: var(--danger); box-shadow: 0 20px 40px rgba(255, 180, 171, 0.08); }
+.toast.error { color: var(--danger); box-shadow: 0 20px 40px rgba(var(--danger-rgb), 0.08); }
 .toast.ok { color: var(--tertiary); box-shadow: 0 20px 40px rgba(var(--glow-rgb), 0.1); }
 
 /* ---------- devices modal ---------- */
