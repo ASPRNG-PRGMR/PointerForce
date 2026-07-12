@@ -2,4 +2,5 @@ run_pointerforce
 pfctl
 obj/
 frontend/build/
-
+run_frontend
+run_backend

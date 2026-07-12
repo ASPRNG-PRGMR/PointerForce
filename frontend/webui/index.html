@@ -116,23 +116,27 @@
     </div>
 
     <section class="panel bindings-panel">
+      <div class="bindings-hint-banner">
+        <p>use <strong>auto-map</strong> to detect and map every button on this mouse automatically.</p>
+        <p>or click a button directly on the mouse to map it by hand, then hit <strong>save changes</strong> to write it to the config file.</p>
+      </div>
+
       <div class="panel-header">
         <h2 class="panel-title">
           bindings <span class="panel-subtitle" id="bindingsScope">all devices</span>
         </h2>
-        <button class="btn btn-accent" id="addBindingBtn">+ bind a key</button>
+        <div class="config-header-actions">
+          <button class="btn btn-ghost" id="autoMapBtn">&#9889; auto-map</button>
+          <button class="btn btn-accent" id="saveChangesBtn">save changes</button>
+        </div>
       </div>
 
       <div class="mouse-picker-info">
-        <div class="mpi-status">
-          <div class="mpi-label">editing input</div>
-          <div class="mpi-key" id="editingKeyLabel">&mdash;</div>
-          <div class="mpi-current" id="editingCurrentLabel">click a button on the mouse to bind it &mdash; or use &ldquo;+ bind a key&rdquo; for other devices.</div>
-        </div>
+        <div class="mpi-label">editing input</div>
+        <div class="mpi-key-pill" id="editingKeyLabel">&mdash;</div>
+        <div class="mpi-current" id="editingCurrentLabel"></div>
 
-        <div class="mpi-divider" aria-hidden="true"></div>
-
-        <div class="mouse-extras">
+        <div class="mouse-extras" hidden>
           <div class="mouse-extras-label">extra buttons on this mouse</div>
           <div class="extra-toggle" data-extra="side1">
             <label><input type="checkbox" id="extraSide1Toggle" /> side button</label>
@@ -164,8 +168,7 @@
           <input id="fCommand" type="text" placeholder="notify-send 'Mouse' 'Side button'" required autocomplete="off" />
         </div>
         <div class="field-actions">
-          <button type="submit" class="btn btn-accent">save</button>
-          <button type="button" class="btn btn-ghost" id="cancelAddBtn">cancel</button>
+          <button type="button" class="btn btn-ghost btn-cancel-outline" id="cancelAddBtn">cancel</button>
         </div>
         <p class="form-error" id="formError" hidden></p>
       </form>
@@ -218,6 +221,67 @@
       <ul class="devices-modal-list" id="devicesModalList"></ul>
     </div>
   </div>
+
+  <div class="automap-modal-overlay" id="automapModalOverlay" hidden>
+    <div class="automap-modal" role="dialog" aria-modal="true" aria-labelledby="automapModalTitle">
+      <button class="btn btn-ghost automap-close" id="automapModalCloseBtn">close &#10005;</button>
+
+      <div class="automap-mouse-pane">
+        <svg viewBox="0 0 240 340" class="mouse-visual automap-mouse-visual" id="automapMouseSvg" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="automapRimGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.4)"></stop>
+              <stop offset="20%" stop-color="rgba(255,255,255,0.05)"></stop>
+              <stop offset="80%" stop-color="rgba(255,255,255,0.05)"></stop>
+              <stop offset="100%" stop-color="rgba(255,255,255,0.4)"></stop>
+            </linearGradient>
+            <linearGradient id="automapRimGradientLight" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(37,99,235,0.65)"></stop>
+              <stop offset="20%" stop-color="rgba(37,99,235,0.1)"></stop>
+              <stop offset="80%" stop-color="rgba(37,99,235,0.1)"></stop>
+              <stop offset="100%" stop-color="rgba(37,99,235,0.65)"></stop>
+            </linearGradient>
+          </defs>
+
+          <path class="mouse-body automap-mouse-body" d="M120,20 C160,20 200,45 205,110 L205,210 C205,275 160,320 120,320 C80,320 65,305 45,280 C25,255 15,220 15,180 C15,140 25,120 35,110 C50,90 80,20 120,20 Z"></path>
+          <path class="mouse-rim automap-mouse-rim" d="M120,20 C160,20 200,45 205,110 L205,210 C205,275 160,320 120,320 C80,320 65,305 45,280 C25,255 15,220 15,180 C15,140 25,120 35,110 C50,90 80,20 120,20 Z"></path>
+          <path class="mouse-accent-line" d="M45,110 Q55,200 45,280"></path>
+
+          <path class="automap-zone" data-slot="right" d="M125,25 L185,35 C195,65 195,100 195,140 L125,145 Z"></path>
+          <path class="automap-zone" data-slot="left" d="M115,25 L55,35 C45,65 45,100 45,140 L115,145 Z"></path>
+
+          <rect class="automap-zone automap-wheel" data-slot="middle" x="107" y="30" width="26" height="75" rx="12"></rect>
+          <rect class="mouse-wheel-inner" x="112" y="35" width="16" height="40" rx="8"></rect>
+
+          <path class="automap-zone" data-slot="side1" d="M25,145 L40,150 L40,185 L25,180 Z"></path>
+          <path class="automap-zone" data-slot="side2" d="M25,190 L40,195 L40,230 L25,225 Z"></path>
+          <path class="automap-zone" data-slot="dpi" d="M108,115 L132,115 L128,135 L112,135 Z"></path>
+        </svg>
+      </div>
+
+      <div class="automap-right-pane">
+        <div class="automap-legend">
+          <span class="automap-legend-item"><kbd class="automap-key">N</kbd> next</span>
+          <span class="automap-legend-item"><kbd class="automap-key">P</kbd> previous</span>
+          <span class="automap-legend-item"><kbd class="automap-key">R</kbd> reset</span>
+          <span class="automap-legend-item"><kbd class="automap-key">ESC</kbd> exit</span>
+        </div>
+
+        <div class="automap-instructions">
+          <div class="automap-step-count" id="automapStepCount">step 1 / 6</div>
+          <h2 class="automap-step-title" id="automapStepTitle">press the left click button</h2>
+          <p class="automap-step-detail" id="automapStepDetail">click the primary / left button now.</p>
+          <div class="automap-captured" id="automapCaptured" hidden>
+            captured <code id="automapCapturedKey">&mdash;</code>
+          </div>
+          <p class="automap-confirm-hint" id="automapConfirmHint" hidden>
+            press <kbd class="automap-key automap-key-pulse">N</kbd> to confirm and move to the next button
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <main class="config-view" id="configView" hidden>
 

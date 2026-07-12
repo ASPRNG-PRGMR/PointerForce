@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
   --bg:                 #131313;
@@ -8,8 +8,8 @@
   --panel-high:          #2a2a2a;
   --line:                #3c494e;
   --text:                #e5e2e1;
-  --text-dim:             #c9c4c1;
-  --text-mute:            #948e8a;
+  --text-dim:             #bbc9cf;
+  --text-mute:            #859399;
   --primary:              #a5e7ff;
   --primary-container:    #00d2ff;
   --tertiary:             #00f5ff;
@@ -18,6 +18,8 @@
   --warn:                 #ffb454;
   --danger:               #ffb4ab;
   --danger-rgb:           255, 180, 171;
+  --success:              #5ee6a0;
+  --success-rgb:          94, 230, 160;
 
   /* previously hardcoded one-off colors, pulled out so light mode can
      override them too */
@@ -26,41 +28,42 @@
   --scrollbar-hover:     #3a3939;
   --accent-text-on-btn:  #003543;
 
-  --mono: 'League Spartan', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --headline: 'League Spartan', var(--mono);
-  --body: 'League Spartan', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --headline: 'Space Grotesk', var(--mono);
+  --body: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --radius: 8px;
   --radius-lg: 12px;
 }
 
 /* ---------- light theme ---------- */
-/* Toggled by app.js setting data-theme="light" on <html>. Originally a
-   cool slate/blue scale (Tailwind slate-50..300); the neutrals were
-   warmed to a stone-toned scale afterward since the cool white/slate
-   combo read as glary on screen for long stretches. The single blue
-   accent (#2563EB), standing in for both primary and tertiary/glow duty,
-   is unchanged - the reference uses one accent color for everything
-   instead of a separate neon "tertiary". --glow-rgb feeds every
-   glow/drop-shadow that used to be hardcoded neon cyan, so those now
-   render as blue here instead of reading as a leftover dark-mode color. */
+/* Toggled by app.js setting data-theme="light" on <html>. This is the
+   "Clinical Lab" light palette supplied as a reference file: a cool
+   slate/blue scale (Tailwind slate-50..300) with a single blue accent
+   (#2563EB) standing in for both primary and tertiary/glow duty, since
+   the reference uses one accent color for everything instead of a
+   separate neon "tertiary". --glow-rgb feeds every glow/drop-shadow that
+   used to be hardcoded neon cyan, so those now render as blue here
+   instead of reading as a leftover dark-mode color. */
 [data-theme="light"] {
-  --bg:                 #faf9f7;
-  --panel:               #fffefc;
-  --panel-alt:           #f9f7f4;
-  --panel-lowest:        #f3f1ec;
-  --panel-high:          #e6e1d8;
-  --line:                #ece8e1;
-  --text:                #221f1b;
-  --text-dim:             #5c564d;
-  --text-mute:            #837c72;
+  --bg:                 #f8fafc;
+  --panel:               #ffffff;
+  --panel-alt:           #f1f5f9;
+  --panel-lowest:        #e2e8f0;
+  --panel-high:          #cbd5e1;
+  --line:                #e2e8f0;
+  --text:                #0f172a;
+  --text-dim:             #475569;
+  --text-mute:            #64748b;
   --primary:              #3b82f6;
   --primary-container:    #2563eb;
   --tertiary:             #2563eb;
   --tertiary-dim:         #1e40af;
   --glow-rgb:             37, 99, 235;
-  --warn:                 #d97706;
-  --danger:               #dc2626;
-  --danger-rgb:           220, 38, 38;
+  --warn:                 #b45309;
+  --danger:               #c4342a;
+  --danger-rgb:           196, 52, 42;
+  --success:              #16a34a;
+  --success-rgb:          22, 163, 74;
 
   --glass-bg:            rgba(255, 255, 255, 0.9);
   --hover-bg:            #f1f5f9;
@@ -69,11 +72,7 @@
 }
 
 [data-theme="light"] .mouse-panel::before {
-  /* was fully hidden before, which is why the breathing glow behind the
-     mouse silhouette was invisible in light mode; keep it on but with a
-     stronger stop since a pale blue glow needs more presence against a
-     white panel than cyan needs against near-black */
-  background: radial-gradient(ellipse 60% 55% at 50% 45%, rgba(var(--glow-rgb), 0.16), transparent 72%);
+  opacity: 0;
 }
 
 * { box-sizing: border-box; }
@@ -145,8 +144,9 @@ button, input, select, textarea {
   align-items: center;
   gap: 8px;
   font-family: var(--headline);
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.02em;
 }
 
 .brand-mark {
@@ -191,20 +191,18 @@ button, input, select, textarea {
 
 .status-dot.ok {
   background: var(--tertiary);
+  box-shadow: 0 0 8px rgba(var(--glow-rgb), 0.8);
   animation: dotPulse 2.4s ease-in-out infinite;
 }
 
 .status-dot.bad {
   background: var(--danger);
-  box-shadow: 0 0 8px rgba(var(--danger-rgb), 0.6);
+  box-shadow: 0 0 8px rgba(255, 180, 171, 0.6);
 }
 
-/* breathing glow: shared by status-dot.ok and live-dot.on so every
-   "connected/live" indicator pulses the same way the mouse illustration
-   does, instead of the fade feeling like a one-off on the mouse panel */
 @keyframes dotPulse {
-  0%, 100% { opacity: 1;    box-shadow: 0 0 5px rgba(var(--glow-rgb), 0.5); }
-  50%      { opacity: 0.6;  box-shadow: 0 0 14px rgba(var(--glow-rgb), 1); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
@@ -223,9 +221,10 @@ button, input, select, textarea {
   border-radius: var(--radius);
   cursor: pointer;
   font-family: var(--headline);
-  font-weight: 600;
-  font-size: 13.5px;
-  letter-spacing: 0.01em;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   transition: color 0.15s, background 0.15s, box-shadow 0.2s, transform 0.1s;
 }
 
@@ -234,24 +233,7 @@ button, input, select, textarea {
   background: var(--hover-bg);
 }
 
-.btn:active {
-  transform: scale(0.97);
-  background: var(--panel-lowest);
-  box-shadow: 0 0 0 3px rgba(var(--glow-rgb), 0.28);
-}
-
-[data-theme="light"] .btn:hover {
-  /* dark theme's hover-bg is lighter than its resting panel-high, which
-     works on a near-black page; on a white page the same direction makes
-     hover/click feedback nearly invisible, so light mode goes the other
-     way and darkens instead */
-  background: #b7c3d1;
-  color: var(--text);
-}
-
-[data-theme="light"] .btn:active {
-  background: #9fadc0;
-}
+.btn:active { transform: scale(0.97); }
 
 .btn-accent {
   background: linear-gradient(90deg, var(--primary), var(--primary-container));
@@ -259,15 +241,6 @@ button, input, select, textarea {
   font-weight: 700;
   position: relative;
   overflow: hidden;
-  animation: btnAccentBreathe 3.6s ease-in-out infinite;
-}
-
-/* same slow fade-in/out rhythm as the mouse illustration, kept subtle so
-   it reads as "alive" rather than distracting on a button people click a
-   lot */
-@keyframes btnAccentBreathe {
-  0%, 100% { box-shadow: 0 0 0 rgba(var(--glow-rgb), 0); }
-  50%      { box-shadow: 0 0 14px rgba(var(--glow-rgb), 0.4); }
 }
 
 .btn-accent::after {
@@ -286,15 +259,19 @@ button, input, select, textarea {
   100% { transform: translateX(100%); }
 }
 
-.btn-accent:hover {
-  animation-play-state: paused;
-  box-shadow: 0 0 20px rgba(var(--glow-rgb), 0.35);
+/* draws the eye once there's actually something to save, stops the
+   moment it's disabled again */
+@keyframes saveChangesPulse {
+  0%, 100% { filter: brightness(0.8); }
+  50%      { filter: brightness(1.2); }
 }
 
-.btn-accent:active {
-  animation-play-state: paused;
-  filter: brightness(0.9);
-  box-shadow: 0 0 10px rgba(var(--glow-rgb), 0.5);
+#saveChangesBtn {
+  animation: saveChangesPulse 1.7s ease-in-out infinite;
+}
+
+.btn-accent:hover {
+  box-shadow: 0 0 20px rgba(var(--glow-rgb), 0.35);
 }
 
 .btn-ghost {
@@ -307,13 +284,14 @@ button, input, select, textarea {
   background: rgba(var(--glow-rgb), 0.05);
 }
 
-.btn-ghost:active {
-  background: rgba(var(--glow-rgb), 0.14);
-  border-color: var(--tertiary);
+.btn-cancel-outline {
+  border-color: rgba(var(--danger-rgb), 0.5);
 }
 
-[data-theme="light"] .btn-ghost:active {
-  background: rgba(var(--glow-rgb), 0.16);
+.btn-cancel-outline:hover {
+  border-color: var(--danger);
+  background: rgba(var(--danger-rgb), 0.08);
+  color: var(--danger);
 }
 
 .btn-danger {
@@ -325,7 +303,7 @@ button, input, select, textarea {
 
 .btn-danger:hover {
   color: var(--danger);
-  background: rgba(var(--danger-rgb), 0.08);
+  background: rgba(255, 180, 171, 0.08);
 }
 
 .btn:disabled {
@@ -462,7 +440,7 @@ html, body, .panel, .btn, .event-key, .toast {
   position: relative;
 }
 
-.events-panel { background: var(--panel-lowest); position: relative; overflow: hidden; }
+.events-panel { background: var(--panel-lowest); position: relative; overflow: hidden; padding-left: 14px; padding-right: 14px; }
 
 .events-panel::before {
   content: "";
@@ -516,7 +494,7 @@ html, body, .panel, .btn, .event-key, .toast {
 }
 
 .empty-state {
-  color: var(--text-dim);
+  color: var(--text-mute);
   font-size: 13.5px;
   padding: 10px 2px;
 }
@@ -576,9 +554,8 @@ html, body, .panel, .btn, .event-key, .toast {
 
 .empty-state-illo p {
   margin: 0;
-  color: var(--text-dim);
+  color: var(--text-mute);
   font-size: 13px;
-  font-weight: 500;
 }
 
 /* daemon-unreachable full hero overlay */
@@ -632,23 +609,6 @@ html, body, .panel, .btn, .event-key, .toast {
   background: radial-gradient(ellipse 60% 55% at 50% 45%, rgba(var(--glow-rgb), 0.10), transparent 72%);
   pointer-events: none;
   z-index: 0;
-  animation: mousePanelGlowBreathe 3.2s ease-in-out infinite;
-}
-
-@keyframes mousePanelGlowBreathe {
-  0%, 100% { opacity: 0.6; }
-  50%      { opacity: 1; }
-}
-
-[data-theme="light"] .mouse-panel::before {
-  /* light theme needs a noticeably stronger swing to read against a
-     white panel - the same 0.6->1 ratio on a faint glow disappears */
-  animation-name: mousePanelGlowBreatheLight;
-}
-
-@keyframes mousePanelGlowBreatheLight {
-  0%, 100% { opacity: 0.45; }
-  50%      { opacity: 1.4; }
 }
 
 .mouse-visual-wrap {
@@ -686,8 +646,8 @@ html, body, .panel, .btn, .event-key, .toast {
 }
 
 @keyframes mouseGlowPulseLight {
-  0%, 100% { filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.10)) drop-shadow(0 0 6px rgba(var(--glow-rgb), 0.35)); }
-  50%      { filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.10)) drop-shadow(0 0 24px rgba(var(--glow-rgb), 0.75)); }
+  0%, 100% { filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.10)) drop-shadow(0 0 5px rgba(var(--glow-rgb), 0.25)); }
+  50%      { filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.10)) drop-shadow(0 0 18px rgba(var(--glow-rgb), 0.55)); }
 }
 
 /* thin bright sheen tracing the silhouette's edge, like light catching a
@@ -713,7 +673,7 @@ html, body, .panel, .btn, .event-key, .toast {
   stroke-width: 1.2;
   stroke-linejoin: round;
   cursor: pointer;
-  transition: fill 0.2s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: fill 0.05s linear, stroke 0.05s linear, filter 0.05s linear;
 }
 
 .mouse-zone:hover {
@@ -746,17 +706,15 @@ html, body, .panel, .btn, .event-key, .toast {
   pointer-events: none;
 }
 
-/* Briefly flashes a zone when a real hardware event comes in over the
-   live feed, independent of hover/bound/active editing state. */
-@keyframes mouseZoneFlash {
-  0%   { filter: drop-shadow(0 0 16px rgba(var(--glow-rgb), 0.95)); }
-  100% { filter: drop-shadow(0 0 0 rgba(var(--glow-rgb), 0)); }
-}
-
+/* Blinks a zone once when a real hardware event comes in over the live
+   feed, independent of hover/bound/active editing state. No animation
+   here on purpose - JS toggles this class on then off after a short,
+   fixed delay, so it reads as a clean on/off blink rather than a fade. */
 .mouse-zone.event-flash {
-  fill: rgba(var(--glow-rgb), 0.4) !important;
+  fill: rgba(var(--glow-rgb), 0.55) !important;
   stroke: var(--tertiary) !important;
-  animation: mouseZoneFlash 0.5s ease-out;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 14px rgba(var(--glow-rgb), 0.9));
 }
 
 /* Light theme re-skins the mouse itself too (per the "Clinical Lab"
@@ -786,26 +744,16 @@ html, body, .panel, .btn, .event-key, .toast {
 }
 
 [data-theme="light"] .mouse-zone:hover {
-  fill: #eef0fd;
-  stroke: rgba(61, 85, 201, 0.4);
+  fill: #f8fafc;
 }
 
 [data-theme="light"] .mouse-zone.bound {
-  fill: #e6eafd;
-  stroke: #4a5fc9;
-  stroke-width: 1.5;
+  fill: #ffffff;
 }
 
 [data-theme="light"] .mouse-zone.active {
-  /* previously a low-opacity tint (rgba over the body), which let the
-     mouse's underlying body/rim seam lines show through since the shapes
-     aren't a perfectly flush single silhouette. An opaque fill covers
-     that cleanly. Hue also shifted warmer - more indigo, less cyan -
-     per feedback that the cool blue read as icy rather than warm. */
-  fill: #dde3fc;
-  stroke: #3d55c9;
-  stroke-width: 2.5;
-  filter: drop-shadow(0 0 16px rgba(61, 85, 201, 0.55));
+  fill: #ffffff;
+  filter: drop-shadow(0 0 12px rgba(var(--glow-rgb), 0.25));
 }
 
 [data-theme="light"] .mouse-wheel {
@@ -817,52 +765,70 @@ html, body, .panel, .btn, .event-key, .toast {
   min-width: 0;
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-columns: 1.1fr auto 1fr;
-  gap: 28px;
-  width: 100%;
-  margin: 4px 0 24px;
-  padding: 20px 26px;
-  background: var(--panel-alt);
+  margin-bottom: 34px;
+}
+
+.bindings-hint-banner {
+  background: #0a0a0a;
   border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 18px;
 }
 
-.mpi-status {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
+.bindings-hint-banner p {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--text-dim);
 }
 
-.mpi-divider {
-  width: 1px;
-  align-self: stretch;
-  background: var(--panel-high);
+.bindings-hint-banner p + p {
+  margin-top: 8px;
+}
+
+.bindings-hint-banner strong {
+  color: var(--tertiary);
+  font-weight: 800;
+  font-size: 1.2em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+[data-theme="light"] .bindings-hint-banner {
+  background: #14110c;
+}
+
+[data-theme="light"] .bindings-hint-banner p {
+  color: #d8d3cb;
 }
 
 .mpi-label {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-mute);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
-.mpi-key {
+.mpi-key-pill {
+  display: inline-block;
   font-family: var(--headline);
-  font-size: 27px;
+  font-size: 26px;
   font-weight: 700;
-  color: var(--text);
-  margin-bottom: 10px;
-  min-height: 32px;
+  color: var(--tertiary);
+  background: rgba(var(--glow-rgb), 0.09);
+  border: 1px solid rgba(var(--glow-rgb), 0.25);
+  border-radius: 999px;
+  padding: 6px 22px;
+  margin-bottom: 12px;
+  min-height: 26px;
 }
 
 .mpi-current {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-dim);
-  line-height: 1.55;
-  max-width: 42ch;
+  line-height: 1.5;
 }
 
 .mpi-current code {
@@ -874,30 +840,31 @@ html, body, .panel, .btn, .event-key, .toast {
 }
 
 .mouse-extras {
-  min-width: 0;
+  margin-top: 16px;
+  padding-top: 14px;
 }
 
 .mouse-extras-label {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-mute);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .extra-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .extra-toggle label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
+  gap: 6px;
+  font-size: 13.5px;
   color: var(--text-dim);
   cursor: pointer;
   user-select: none;
@@ -905,8 +872,6 @@ html, body, .panel, .btn, .event-key, .toast {
 
 .extra-toggle input[type="checkbox"] {
   accent-color: var(--tertiary);
-  width: 15px;
-  height: 15px;
 }
 
 .extra-key-input {
@@ -914,38 +879,26 @@ html, body, .panel, .btn, .event-key, .toast {
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 3px 7px;
   color: var(--tertiary);
   font-family: var(--mono);
-  font-size: 13.5px;
-  width: 116px;
+  font-size: 13px;
+  width: 110px;
   transition: border-color 0.15s;
 }
 
 .extra-key-input:focus { border-bottom-color: var(--tertiary); }
 
 .mouse-extras-hint {
-  margin: 14px 0 0;
-  font-size: 13px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
   color: var(--text-mute);
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .mouse-extras-hint code {
   color: var(--tertiary);
   font-family: var(--mono);
-}
-
-@media (max-width: 700px) {
-  .mouse-picker-info {
-    grid-template-columns: 1fr;
-    gap: 18px;
-    padding: 18px 20px;
-  }
-  .mpi-divider {
-    width: auto;
-    height: 1px;
-  }
 }
 
 /* ---------- devices ---------- */
@@ -1142,6 +1095,7 @@ html, body, .panel, .btn, .event-key, .toast {
 
 .live-dot.on {
   background: var(--tertiary);
+  box-shadow: 0 0 6px rgba(var(--glow-rgb), 0.8);
   animation: dotPulse 2.4s ease-in-out infinite;
 }
 
@@ -1156,7 +1110,6 @@ html, body, .panel, .btn, .event-key, .toast {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 3px;
   font-family: var(--mono);
   font-size: 13px;
@@ -1167,7 +1120,6 @@ html, body, .panel, .btn, .event-key, .toast {
   flex-shrink: 0;
   margin-top: 6px;
   width: 100%;
-  max-width: 250px;
   padding: 8px;
   border-radius: var(--radius);
   border: 1px dashed var(--line);
@@ -1191,8 +1143,7 @@ html, body, .panel, .btn, .event-key, .toast {
   align-items: flex-start;
   gap: 8px;
   width: 100%;
-  max-width: 250px;
-  padding: 6px 4px;
+  padding: 5px 2px;
   border-radius: var(--radius);
   animation: eventFadeIn 1.8s ease-out forwards;
 }
@@ -1223,7 +1174,7 @@ html, body, .panel, .btn, .event-key, .toast {
   min-width: 0;
   cursor: pointer;
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 2px 10px 2px 13px;
   background: rgba(var(--glow-rgb), 0.07);
   transition: background 0.15s ease;
 }
@@ -1501,7 +1452,7 @@ html, body, .panel, .btn, .event-key, .toast {
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-.toast.error { color: var(--danger); box-shadow: 0 20px 40px rgba(var(--danger-rgb), 0.08); }
+.toast.error { color: var(--danger); box-shadow: 0 20px 40px rgba(255, 180, 171, 0.08); }
 .toast.ok { color: var(--tertiary); box-shadow: 0 20px 40px rgba(var(--glow-rgb), 0.1); }
 
 /* ---------- devices modal ---------- */
@@ -1545,6 +1496,264 @@ html, body, .panel, .btn, .event-key, .toast {
   .devices-modal-list {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- auto-map wizard ---------- */
+
+.automap-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: toastIn 0.15s ease-out;
+}
+
+/* While the wizard is open, the dashboard's own mouse stays visible
+   above the dim overlay instead of being flattened into it - it's
+   already wired to blink on every real event, so leaving it peeking
+   through means both mice give live feedback at once. Dimmed relative
+   to the wizard's own mouse so it still reads as secondary. */
+body.automap-open .mouse-panel {
+  position: relative;
+  z-index: 101;
+  opacity: 0.6;
+  filter: saturate(0.85);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.automap-modal {
+  position: relative;
+  width: min(860px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  gap: 28px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 28px 32px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+}
+
+.automap-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.automap-mouse-pane {
+  flex: 0 0 auto;
+  width: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.automap-mouse-visual {
+  width: 100%;
+  height: auto;
+  color: var(--text-mute);
+}
+
+.automap-right-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 6px;
+}
+
+/* thin upper strip: keyboard legend */
+.automap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.automap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.automap-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--panel-high);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* lower part: current-step instructions */
+.automap-instructions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+}
+
+.automap-step-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.automap-step-title {
+  margin: 0;
+  font-family: var(--headline);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.automap-step-detail {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 44ch;
+}
+
+.automap-captured {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: rgba(var(--glow-rgb), 0.1);
+  border: 1px solid rgba(var(--glow-rgb), 0.3);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+.automap-captured code {
+  color: var(--tertiary);
+  font-weight: 600;
+}
+
+.automap-confirm-hint {
+  margin: 2px 0 0;
+  color: var(--text-mute);
+  font-size: 13px;
+}
+
+/* only shown once a press has actually been captured, so it doubles as
+   a "your turn" cue rather than showing from the start of every step */
+@keyframes automapKeyPulseGreen {
+  0%, 100% { opacity: 0.4; box-shadow: 0 0 0 rgba(var(--success-rgb), 0); }
+  50%      { opacity: 1;   box-shadow: 0 0 10px rgba(var(--success-rgb), 0.65); }
+}
+
+.automap-key-pulse {
+  color: var(--success);
+  border-color: var(--success);
+  animation: automapKeyPulseGreen 1.3s ease-in-out infinite;
+}
+
+@media (max-width: 640px) {
+  .automap-modal {
+    flex-direction: column;
+    align-items: center;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+  .automap-mouse-pane {
+    width: 160px;
+  }
+}
+
+/* zone states - pending (not reached yet) uses the same resting look as
+   the dashboard mouse's own zones, so only the three "eventful" states
+   need their own rules */
+.automap-zone {
+  fill: #222222;
+  stroke: #474747;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  transition: fill 0.06s linear, stroke 0.06s linear, filter 0.06s linear;
+}
+
+.automap-wheel {
+  fill: #141414;
+  stroke: #3a3a3a;
+}
+
+[data-theme="light"] .automap-zone {
+  fill: #ffffff;
+  stroke: #e2e8f0;
+}
+
+[data-theme="light"] .automap-wheel {
+  fill: #f1f5f9;
+  stroke: #cbd5e1;
+}
+
+/* currently the active step - breathes in and out the whole time this
+   step is active, whether or not a press has already been captured for
+   it (that used to switch to a separate solid-blue state, which read as
+   a second, confusingly similar "blue" signal - removed). */
+@keyframes automapZonePulse {
+  0%, 100% { fill-opacity: 0.35; filter: drop-shadow(0 0 4px rgba(var(--glow-rgb), 0.25)); }
+  50%      { fill-opacity: 1;    filter: drop-shadow(0 0 18px rgba(var(--glow-rgb), 0.7)); }
+}
+
+.automap-zone.state-current {
+  fill: var(--tertiary);
+  stroke: var(--tertiary);
+  stroke-width: 1.5;
+  animation: automapZonePulse 1.6s ease-in-out infinite;
+}
+
+/* a press just landed - blinks once. No animation/keyframes here on
+   purpose, same mechanism as the dashboard mouse: JS toggles this class
+   on then off after a short fixed delay, so it's a clean instant
+   on/off blink layered on top of state-current's pulse, not a fade. */
+.automap-zone.zone-flash {
+  fill: var(--tertiary) !important;
+  fill-opacity: 1 !important;
+  stroke: var(--tertiary) !important;
+  stroke-width: 1.8;
+  filter: drop-shadow(0 0 20px rgba(var(--glow-rgb), 1)) !important;
+}
+
+/* confirmed via N */
+.automap-zone.state-mapped {
+  fill: var(--success);
+  stroke: var(--success);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 8px rgba(var(--success-rgb), 0.45));
+}
+
+/* skipped via N with nothing captured, or explicitly not present */
+.automap-zone.state-failed {
+  fill: var(--danger);
+  stroke: var(--danger);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 8px rgba(var(--danger-rgb), 0.35));
 }
 
 .events-modal-overlay {

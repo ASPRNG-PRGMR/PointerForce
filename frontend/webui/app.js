@@ -19,7 +19,7 @@
   const bindingsBody = $("bindingsBody");
   const bindingsEmpty = $("bindingsEmpty");
   const bindingsScope = $("bindingsScope");
-  const addBindingBtn = $("addBindingBtn");
+  const saveChangesBtn = $("saveChangesBtn");
   const addForm = $("addForm");
   const cancelAddBtn = $("cancelAddBtn");
   const fDevice = $("fDevice");
@@ -49,6 +49,17 @@
   const eventsModalColumns = $("eventsModalColumns");
   const eventsModalCount = $("eventsModalCount");
   const eventsModalCloseBtn = $("eventsModalCloseBtn");
+
+  const autoMapBtn = $("autoMapBtn");
+  const automapModalOverlay = $("automapModalOverlay");
+  const automapModalCloseBtn = $("automapModalCloseBtn");
+  const automapMouseSvg = $("automapMouseSvg");
+  const automapStepCount = $("automapStepCount");
+  const automapStepTitle = $("automapStepTitle");
+  const automapStepDetail = $("automapStepDetail");
+  const automapCaptured = $("automapCaptured");
+  const automapCapturedKey = $("automapCapturedKey");
+  const automapConfirmHint = $("automapConfirmHint");
 
   const MAX_EVENTS = 30;
   const EVENT_COLUMNS = 3;
@@ -335,16 +346,18 @@
   }
 
   // Mouse zones are a generic key-picker (not tied to one device), so any
-  // incoming event flashes the zone by key alone, same as the illustration
-  // in the reference design "pressing" on real hardware input.
+  // incoming event blinks the zone by key alone, same as the illustration
+  // in the reference design "pressing" on real hardware input. Class is
+  // toggled on then off on a short fixed timer - a single clean blink,
+  // not an animated fade.
   function flashMouseZone(key) {
     const zone = mouseSvg.querySelector(`.mouse-zone[data-key="${cssEscape(key)}"]`);
     if (!zone) return;
     zone.classList.remove("event-flash");
-    void zone.getBBox && zone.getBBox(); // force reflow so repeat events restart the animation
+    void zone.getBBox && zone.getBBox(); // force reflow so repeat events restart the blink
     zone.classList.add("event-flash");
     clearTimeout(zone._flashTimer);
-    zone._flashTimer = setTimeout(() => zone.classList.remove("event-flash"), 500);
+    zone._flashTimer = setTimeout(() => zone.classList.remove("event-flash"), 160);
   }
 
   function updateMouseZones(rows) {
@@ -381,6 +394,7 @@
   }
 
   getMouseZones().forEach(bindZoneClick); // the three universal core zones (left/right/wheel)
+  mouseSvg.addEventListener("contextmenu", (e) => e.preventDefault());
 
   function loadExtrasState() {
     let saved = {};
@@ -470,20 +484,15 @@
   function resetMousePickerInfo() {
     getMouseZones().forEach((zone) => zone.classList.remove("active"));
     editingKeyLabel.textContent = "\u2014";
-    editingCurrentLabel.textContent = "click a button on the mouse to bind it \u2014 or use \u201c+ bind a key\u201d for other devices.";
+    editingCurrentLabel.textContent = "";
   }
 
-  addBindingBtn.addEventListener("click", () => {
-    addForm.hidden = !addForm.hidden;
-    if (!addForm.hidden) {
-      getMouseZones().forEach((zone) => zone.classList.remove("active"));
-      editingKeyLabel.textContent = "custom";
-      editingCurrentLabel.textContent = "manual entry \u2014 enter any key name and device below.";
-      if (selectedDevice) fDevice.value = selectedDevice;
-      fKey.focus();
-    } else {
-      resetMousePickerInfo();
-    }
+  // "save changes" is a shortcut for submitting whatever's currently
+  // open in the picker form below - clicking a mouse zone is what opens
+  // it, so this button doesn't need its own separate blank-entry mode.
+  saveChangesBtn.addEventListener("click", () => {
+    if (addForm.hidden) return;
+    addForm.requestSubmit();
   });
 
   cancelAddBtn.addEventListener("click", () => {
@@ -825,6 +834,13 @@
   // Parses lines like:
   //   [gaming_mouse] BTN_FORWARD  ->  playerctl next
   //   [gaming_mouse] BTN_SIDE
+  //
+  // Some daemon builds also report a press/release state right after the
+  // key, e.g. "[gaming_mouse] BTN_SIDE down" / "... up". That's the only
+  // way the UI can tell a held button from a tap, so it's picked up here
+  // when present - state is null otherwise, and everything downstream
+  // treats "no state" as a single discrete event (the old behavior),
+  // not as an assumed press.
   function parseEventLine(line) {
     const lb = line.indexOf("[");
     const rb = line.indexOf("]", lb);
@@ -837,10 +853,18 @@
     const key = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
     rest = spaceIdx === -1 ? "" : rest.slice(spaceIdx).trim();
 
+    let state = null;
+    const stateMatch = rest.match(/^(down|up|press(?:ed)?|release(?:d)?)\b/i);
+    if (stateMatch) {
+      const word = stateMatch[1].toLowerCase();
+      state = word === "down" || word.startsWith("press") ? "down" : "up";
+      rest = rest.slice(stateMatch[0].length).trim();
+    }
+
     const arrowIdx = rest.indexOf("\u2192");
     const command = arrowIdx === -1 ? "" : rest.slice(arrowIdx + 1).trim();
 
-    return { device, key, command };
+    return { device, key, command, state };
   }
 
   function eventLineHtml(entry) {
@@ -917,6 +941,7 @@
     if (parsed) {
       flashBindingRow(parsed.device, parsed.key);
       flashMouseZone(parsed.key);
+      automapHandleEvent(parsed);
     }
 
     eventLog.unshift({ time: timeNow(), raw, parsed });
@@ -1010,6 +1035,173 @@
       // EventSource retries automatically; nothing else to do here.
     };
   }
+
+  // ---------------- auto-map wizard ----------------
+  //
+  // Walks the person through every button slot the mouse graphic knows
+  // about (left/right/middle are fixed core zones; side1/side2/dpi are
+  // the same "extras" the picker panel already supports). Each step
+  // listens for the *next real hardware event* from the live feed - not
+  // a simulated click - and records whatever raw key name the daemon
+  // actually reports for it, since that's the whole point: some mice
+  // report BTN_SIDE, others report BTN_FORWARD, etc. Extra-button slots
+  // get written straight into the existing EXTRA_DEFS/localStorage
+  // mechanism on confirm; core slots are captured for display/QA only,
+  // since their zone keys aren't remappable elsewhere in the app.
+
+  const AUTOMAP_STEPS = [
+    { slot: "left",   title: "press the left click button",         detail: "click the primary / left button now.", required: true },
+    { slot: "right",  title: "press the right click button",        detail: "click the secondary / right button now.", required: true },
+    { slot: "middle", title: "press the wheel / middle button",     detail: "click the scroll wheel straight down.", required: true },
+    { slot: "side1",  title: "press the side button",               detail: "the thumb button toward the front of the mouse.", required: false, extra: "side1" },
+    { slot: "side2",  title: "press the second side button",        detail: "the thumb button toward the back of the mouse.", required: false, extra: "side2" },
+    { slot: "dpi",    title: "press the dpi button",                detail: "the small button that switches sensitivity, if it has one.", required: false, extra: "dpi" },
+  ];
+
+  let automapIndex = 0;
+  let automapState = {}; // slot -> { status: "pending" | "captured" | "mapped" | "failed", key: string|null }
+
+  function automapZoneFor(slot) {
+    return automapMouseSvg.querySelector(`.automap-zone[data-slot="${slot}"]`);
+  }
+
+  function resetAutomapState() {
+    automapState = {};
+    AUTOMAP_STEPS.forEach((s) => { automapState[s.slot] = { status: "pending", key: null }; });
+    automapIndex = 0;
+  }
+
+  function renderAutomapZones() {
+    const currentSlot = AUTOMAP_STEPS[automapIndex].slot;
+    AUTOMAP_STEPS.forEach((step) => {
+      const zone = automapZoneFor(step.slot);
+      if (!zone) return;
+      const st = automapState[step.slot];
+      zone.classList.remove("state-current", "state-mapped", "state-failed");
+      if (st.status === "mapped") zone.classList.add("state-mapped");
+      else if (st.status === "failed") zone.classList.add("state-failed");
+      else if (step.slot === currentSlot) zone.classList.add("state-current");
+    });
+  }
+
+  function renderAutomapInstructions() {
+    const step = AUTOMAP_STEPS[automapIndex];
+    const st = automapState[step.slot];
+    automapStepCount.textContent = `step ${automapIndex + 1} / ${AUTOMAP_STEPS.length}`;
+    automapStepTitle.textContent = step.title;
+
+    if (st.status === "captured") {
+      automapStepDetail.textContent = "press the button again to recapture it.";
+      automapCaptured.hidden = false;
+      automapCapturedKey.textContent = st.key;
+      automapConfirmHint.hidden = false;
+    } else {
+      automapStepDetail.textContent = step.required
+        ? step.detail
+        : `${step.detail} if this mouse doesn't have it, press N to skip.`;
+      automapCaptured.hidden = true;
+      automapCapturedKey.textContent = "\u2014";
+      automapConfirmHint.hidden = true;
+    }
+  }
+
+  function renderAutomap() {
+    renderAutomapZones();
+    renderAutomapInstructions();
+  }
+
+  function openAutomapModal() {
+    resetAutomapState();
+    automapModalOverlay.hidden = false;
+    document.body.classList.add("automap-open");
+    renderAutomap();
+  }
+
+  function closeAutomapModal() {
+    automapModalOverlay.hidden = true;
+    document.body.classList.remove("automap-open");
+  }
+
+  function applyAutomapResult(step, key) {
+    if (!step.extra) return; // core left/right/middle zones aren't remappable
+    const def = EXTRA_DEFS[step.extra];
+    if (!def) return;
+    def.toggle.checked = true;
+    def.input.value = key;
+    def.input.hidden = false;
+    saveExtrasState();
+    renderMouseExtraZones();
+  }
+
+  function automapGoNext() {
+    const step = AUTOMAP_STEPS[automapIndex];
+    const st = automapState[step.slot];
+    if (st.status === "captured") {
+      st.status = "mapped";
+      applyAutomapResult(step, st.key);
+    } else if (st.status !== "mapped") {
+      st.status = "failed";
+      st.key = null;
+    }
+
+    if (automapIndex < AUTOMAP_STEPS.length - 1) {
+      automapIndex += 1;
+      renderAutomap();
+    } else {
+      const mapped = Object.values(automapState).filter((s) => s.status === "mapped").length;
+      toast(`auto-map complete \u2014 ${mapped} of ${AUTOMAP_STEPS.length} buttons mapped`, "ok");
+      closeAutomapModal();
+    }
+  }
+
+  function automapGoPrev() {
+    if (automapIndex === 0) return;
+    automapIndex -= 1;
+    renderAutomap();
+  }
+
+  function automapResetAll() {
+    resetAutomapState();
+    renderAutomap();
+    toast("auto-map reset", "ok");
+  }
+
+  // Called for every real hardware event while the wizard is open; only
+  // the currently-listening step reacts to it.
+  function automapHandleEvent(parsed) {
+    if (automapModalOverlay.hidden) return;
+    if (parsed.state === "up") return; // release edge - nothing new to capture
+    const step = AUTOMAP_STEPS[automapIndex];
+    const st = automapState[step.slot];
+    st.status = "captured";
+    st.key = parsed.key;
+    renderAutomap();
+
+    const zone = automapZoneFor(step.slot);
+    if (zone) {
+      zone.classList.remove("zone-flash");
+      void zone.getBBox && zone.getBBox(); // force reflow so repeat presses restart the blink
+      zone.classList.add("zone-flash");
+      clearTimeout(zone._flashTimer);
+      zone._flashTimer = setTimeout(() => zone.classList.remove("zone-flash"), 160);
+    }
+  }
+
+  autoMapBtn.addEventListener("click", openAutomapModal);
+  automapMouseSvg.addEventListener("contextmenu", (e) => e.preventDefault());
+  automapModalCloseBtn.addEventListener("click", closeAutomapModal);
+  automapModalOverlay.addEventListener("click", (e) => {
+    if (e.target === automapModalOverlay) closeAutomapModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (automapModalOverlay.hidden) return;
+    const key = e.key.toLowerCase();
+    if (e.key === "Escape") { closeAutomapModal(); return; }
+    if (key === "n") { e.preventDefault(); automapGoNext(); return; }
+    if (key === "p") { e.preventDefault(); automapGoPrev(); return; }
+    if (key === "r") { e.preventDefault(); automapResetAll(); return; }
+  });
 
   // ---------------- misc utils ----------------
 
